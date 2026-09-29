@@ -92,6 +92,7 @@ const translations: Record<Language, Record<string, string>> = {
     'Could not submit the request.': 'ጥያቄውን መላክ አልተቻለም።',
     'Could not update request status.': 'የጥያቄውን ሁኔታ ማዘመን አልተቻለም።',
     'Request was not found or was already reviewed.': 'ጥያቄው አልተገኘም ወይም አስቀድሞ ተገምግሟል።',
+    'Please complete all required fields.': 'እባክዎ ሁሉንም አስፈላጊ መረጃዎች ይሙሉ።',
   },
 }
 
@@ -375,7 +376,7 @@ function App() {
               <section className="form-panel">
                 <div className="panel-heading"><div><div className="eyebrow">{t(language, 'NEW SUBMISSION')}</div><h2>{t(language, 'Request permission')}</h2></div><span className="panel-index">01 <span>/ 02</span></span></div>
                 <p className="panel-description">{t(language, 'Share the details below. Your admin will review and get back to you.')}</p>
-                <form className="request-form" onSubmit={submitRequest}>
+                <form className="request-form" onSubmit={submitRequest} onInvalidCapture={() => setToast(t(language, 'Please complete all required fields.'))}>
                   <label className="field"><span>{t(language, 'Permission type')}</span><span className="select-wrap"><select value={type} onChange={(event) => setType(event.target.value as PermissionType)}>{permissionTypes.map((permissionType) => <option key={permissionType} value={permissionType}>{t(language, permissionType)}</option>)}</select><ChevronDown size={16} /></span></label>
                   <label className="field"><span>{t(language, 'Date needed')}</span><span className="input-icon-wrap"><input type="date" value={date} min={localDate()} onChange={(event) => setDate(event.target.value)} required /><CalendarDays size={16} /></span></label>
                   <div className="field-pair">
