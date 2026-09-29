@@ -12,13 +12,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/node": "^26.6.3",
     "lucide-react": "^1.48.0",
     "mongodb": "^7.7.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
