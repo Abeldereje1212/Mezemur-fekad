@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LockKeyhole,
   LogOut,
+  Menu,
   Phone,
   Plus,
   Search,
@@ -35,6 +36,7 @@ interface PermissionRequest {
 }
 
 interface TelegramUser {
+  id?: number
   first_name?: string
   last_name?: string
   username?: string
@@ -42,13 +44,11 @@ interface TelegramUser {
 
 declare global {
   interface Window {
-    Telegram?: { WebApp?: { ready: () => void; expand: () => void; initDataUnsafe?: { user?: TelegramUser } } }
+    Telegram?: { WebApp?: { ready: () => void; expand: () => void; initData?: string; initDataUnsafe?: { user?: TelegramUser } } }
   }
 }
 
 const STORAGE_KEY = 'fekad-permission-requests'
-const DEMO_ADMIN_USERNAME = 'admin'
-const DEMO_ADMIN_PASSWORD = 'fekad123'
 const LANGUAGE_KEY = 'fekad-language'
 const permissionTypes: PermissionType[] = ['Annual leave', 'Sick leave', 'Personal leave', 'Late arrival', 'Early departure', 'Other']
 const today = new Date()
@@ -68,7 +68,7 @@ const translations: Record<Language, Record<string, string>> = {
     'By submitting, this will be shared with your admin.': 'ይህ ጥያቄ ለአስተዳዳሪው ይላካል።', 'Send request': 'ጥያቄ ላክ', 'Your request has been sent to the admin.': 'ጥያቄዎ ለአስተዳዳሪው ተልኳል።',
     'YOUR ACTIVITY': 'የእኔ ጥያቄዎች', 'Recent requests': 'የቅርብ ጊዜ ጥያቄዎች', 'Your requests will show up here.': 'ጥያቄዎችዎ እዚህ ይታያሉ።',
     'Open request log': 'ሁሉንም ጥያቄዎች ይመልከቱ', 'Plans change. A little notice helps everyone stay in sync.': 'ዕቅዶች ሊቀየሩ ይችላሉ። አስቀድሞ ማሳወቅ ሁሉንም ያግዛል።',
-    'FEKAD PEOPLE TEAM': 'የፈቃድ ቡድን', 'PEOPLE OPERATIONS / ADMIN': 'የሰራተኞች አስተዳደር / አስተዳዳሪ', 'Request log': 'የጥያቄ ዝርዝር',
+    'PEOPLE TEAM': 'የሰራተኞች ቡድን', 'PEOPLE OPERATIONS / ADMIN': 'የሰራተኞች አስተዳደር / አስተዳዳሪ', 'Request log': 'የጥያቄ ዝርዝር',
     'Review requests and keep the team moving.': 'ጥያቄዎችን ይገምግሙ እና ቡድኑን ያስተባብሩ።', 'NEEDS YOUR ATTENTION': 'ግምገማ የሚጠብቁ',
     'pending': 'በመጠባበቅ ላይ', 'ALL REQUESTS': 'ሁሉም ጥያቄዎች', 'REJECTED': 'ውድቅ የተደረጉ', 'OPEN': 'ክፍት',
     'INBOX': 'ጥያቄዎች', 'All permissions': 'ሁሉም ፈቃዶች', 'Clear filters': 'ማጣሪያዎችን አጽዳ',
@@ -79,9 +79,19 @@ const translations: Record<Language, Record<string, string>> = {
     'Up to date': 'የተዘመነ', 'Decisions update the request status immediately for the person who submitted it.': 'ውሳኔው የጥያቄውን ሁኔታ ወዲያውኑ ያዘምናል።',
     'ADMIN ACCESS': 'የአስተዳዳሪ መግቢያ', 'Welcome back.': 'እንኳን ደህና መጡ።', 'Sign in to review team permission requests.': 'የቡድኑን የፈቃድ ጥያቄዎች ለመገምገም ይግቡ።',
     'Username': 'የተጠቃሚ ስም', 'Password': 'የይለፍ ቃል', 'Admin username': 'የአስተዳዳሪ ስም', 'Enter password': 'የይለፍ ቃል ያስገቡ',
-    'Username or password is incorrect.': 'የተጠቃሚ ስም ወይም የይለፍ ቃል ትክክል አይደለም።', 'Sign in': 'ግባ', 'Demo sign-in': 'የሙከራ መግቢያ',
+    'Username or password is incorrect.': 'የተጠቃሚ ስም ወይም የይለፍ ቃል ትክክል አይደለም።', 'Sign in': 'ግባ',
     'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Reviewed': 'ተገምግሟል',
+    'Open navigation menu': 'የአሰሳ ምናሌ ክፈት', 'Close navigation menu': 'የአሰሳ ምናሌ ዝጋ',
     'Permission approved.': 'ፈቃዱ ተፈቅዷል።', 'Permission rejected.': 'ፈቃዱ ውድቅ ተደርጓል።',
+    'Open this app in Telegram to view your requests.': 'ጥያቄዎችዎን ለማየት መተግበሪያውን በቴሌግራም ይክፈቱ።',
+    'Open this app in Telegram to submit a request.': 'ጥያቄ ለማቅረብ መተግበሪያውን በቴሌግራም ይክፈቱ።',
+    'The request service is temporarily unavailable.': 'የጥያቄ አገልግሎቱ ለጊዜው አይገኝም።',
+    'Admin sign-in is required.': 'የአስተዳዳሪ መግቢያ ያስፈልጋል።',
+    'Please provide valid request details.': 'እባክዎ ትክክለኛ የጥያቄ መረጃ ያስገቡ።',
+    'Could not load requests.': 'ጥያቄዎችን መጫን አልተቻለም።',
+    'Could not submit the request.': 'ጥያቄውን መላክ አልተቻለም።',
+    'Could not update request status.': 'የጥያቄውን ሁኔታ ማዘመን አልተቻለም።',
+    'Request was not found or was already reviewed.': 'ጥያቄው አልተገኘም ወይም አስቀድሞ ተገምግሟል።',
   },
 }
 
@@ -134,12 +144,18 @@ function StatusBadge({ status, language }: { status: RequestStatus; language: La
   return <span className={`status-badge status-${status}`}><span />{t(language, statusKeys[status])}</span>
 }
 
+function telegramHeaders(): Record<string, string> {
+  const initData = window.Telegram?.WebApp?.initData
+  return initData ? { 'x-telegram-init-data': initData } : {}
+}
+
 function App() {
   const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
   const initialName = [telegramUser?.first_name, telegramUser?.last_name].filter(Boolean).join(' ')
-  const [requests, setRequests] = useState<PermissionRequest[]>(readRequests)
+  const [requests, setRequests] = useState<PermissionRequest[]>(() => import.meta.env.DEV ? readRequests() : [])
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'am' ? 'am' : 'en')
   const [view, setView] = useState<'requests' | 'admin'>('requests')
+  const [menuOpen, setMenuOpen] = useState(false)
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const [showAdminLogin, setShowAdminLogin] = useState(false)
   const [adminUsername, setAdminUsername] = useState('')
@@ -161,8 +177,29 @@ function App() {
   }, [])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests))
-  }, [requests])
+    let active = true
+    fetch('/api/requests', { headers: telegramHeaders() })
+      .then(async (response) => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Could not load requests.')
+        return result as { role: 'admin' | 'user'; requests: PermissionRequest[] }
+      })
+      .then((result) => {
+        if (!active) return
+        setRequests(result.requests)
+        if (result.role === 'admin') {
+          setAdminAuthenticated(true)
+          setView('admin')
+        }
+      })
+      .catch((error: unknown) => {
+        if (active && !import.meta.env.DEV) {
+          setRequests([])
+          setToast(t(language, error instanceof Error ? error.message : 'The request service is temporarily unavailable.'))
+        }
+      })
+    return () => { active = false }
+  }, [language])
 
   useEffect(() => {
     localStorage.setItem(LANGUAGE_KEY, language)
@@ -196,47 +233,103 @@ function App() {
     setShowAdminLogin(true)
   }
 
-  function signInAdmin(event: FormEvent<HTMLFormElement>) {
+  async function signInAdmin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (adminUsername.trim() !== DEMO_ADMIN_USERNAME || adminPassword !== DEMO_ADMIN_PASSWORD) {
-      setLoginError('Username or password is incorrect.')
-      return
+    setLoginError('')
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: adminUsername, password: adminPassword }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Username or password is incorrect.')
+
+      const requestsResponse = await fetch('/api/requests')
+      const requestsResult = await requestsResponse.json()
+      if (!requestsResponse.ok) throw new Error(requestsResult.error || 'Could not load requests.')
+      setRequests(requestsResult.requests)
+      setAdminAuthenticated(true)
+      setShowAdminLogin(false)
+      setAdminPassword('')
+      setView('admin')
+    } catch (error) {
+      setLoginError(t(language, error instanceof Error ? error.message : 'Could not sign in.'))
     }
-    setAdminAuthenticated(true)
-    setShowAdminLogin(false)
-    setAdminPassword('')
-    setView('admin')
   }
 
-  function signOutAdmin() {
+  async function signOutAdmin() {
+    await fetch('/api/admin/logout', { method: 'POST' }).catch(() => undefined)
     setAdminAuthenticated(false)
     setView('requests')
     setSearch('')
     setDateFilter('')
-  }
-
-  function submitRequest(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const nextRequest: PermissionRequest = {
-      id: crypto.randomUUID(), name: name.trim(), username: username.trim().startsWith('@') ? username.trim() : `@${username.trim()}`,
-      phone: phone.trim(), type, date, reason: reason.trim(), status: 'pending', submittedAt: new Date().toISOString(),
+    try {
+      const response = await fetch('/api/requests', { headers: telegramHeaders() })
+      if (!response.ok) throw new Error('Could not load personal requests.')
+      const result = await response.json()
+      setRequests(result.requests)
+    } catch {
+      setRequests(import.meta.env.DEV ? readRequests() : [])
     }
-    setRequests((current) => [nextRequest, ...current])
-    setReason('')
-    setToast(t(language, 'Your request has been sent to the admin.'))
   }
 
-  function updateStatus(id: string, status: RequestStatus) {
-    setRequests((current) => current.map((request) => request.id === id ? { ...request, status } : request))
-    setToast(t(language, status === 'approved' ? 'Permission approved.' : 'Permission rejected.'))
+  async function submitRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    try {
+      const response = await fetch('/api/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...telegramHeaders() },
+        body: JSON.stringify({ name, phone, type, date, reason }),
+      })
+      if (import.meta.env.DEV && response.status === 404) {
+        const localRequest: PermissionRequest = {
+          id: crypto.randomUUID(), name: name.trim(), username: username.trim().startsWith('@') ? username.trim() : `@${username.trim()}`,
+          phone: phone.trim(), type, date, reason: reason.trim(), status: 'pending', submittedAt: new Date().toISOString(),
+        }
+        const updated = [localRequest, ...requests]
+        setRequests(updated)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      } else {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Could not submit the request.')
+        setRequests((current) => [result.request, ...current])
+      }
+      setReason('')
+      setToast(t(language, 'Your request has been sent to the admin.'))
+    } catch (error) {
+      setToast(t(language, error instanceof Error ? error.message : 'Could not submit the request.'))
+    }
+  }
+
+  async function updateStatus(id: string, status: RequestStatus) {
+    try {
+      const response = await fetch('/api/requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      })
+      if (import.meta.env.DEV && response.status === 404) {
+        const updated = requests.map((request) => request.id === id ? { ...request, status } : request)
+        setRequests(updated)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      } else {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Could not update request status.')
+        setRequests((current) => current.map((request) => request.id === id ? result.request : request))
+      }
+      setToast(t(language, status === 'approved' ? 'Permission approved.' : 'Permission rejected.'))
+    } catch (error) {
+      setToast(t(language, error instanceof Error ? error.message : 'Could not update request status.'))
+    }
   }
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#home" aria-label="Fekad home">
-          <span className="brand-mark">f</span>
-          <span className="brand-name">fekad<span>WORKPLACE</span></span>
+        <a className="brand" href="#home" aria-label="Birhane Hiwot home">
+          <span className="brand-mark">B</span>
+          <span className="brand-name"><strong>Birhane Hiwot</strong><span lang="am">ብርሃነ ህይወት</span></span>
         </a>
         <div className="sidebar-label">{t(language, 'WORKSPACE')}</div>
         <nav className="side-nav" aria-label="Main navigation">
@@ -252,7 +345,7 @@ function App() {
           <div className="sidebar-note"><span className="online-dot" /> {t(language, 'Request desk is open')}</div>
           <div className="profile-row">
             <div className="avatar">{initialName ? initialName.charAt(0).toUpperCase() : 'F'}</div>
-            <div className="profile-copy"><strong>{initialName || 'Fekad member'}</strong><span>{username ? (username.startsWith('@') ? username : `@${username}`) : '@your_username'}</span></div>
+            <div className="profile-copy"><strong>{initialName || 'Birhane Hiwot member'}</strong><span>{username ? (username.startsWith('@') ? username : `@${username}`) : '@your_username'}</span></div>
             {adminAuthenticated && <button type="button" className="logout-button" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}
           </div>
         </div>
@@ -260,8 +353,8 @@ function App() {
 
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumb"><span>FEKAD</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : 'PERMISSION DESK')}</strong></div>
-          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<div className="topbar-avatar">{initialName ? initialName.charAt(0).toUpperCase() : 'F'}</div></div>
+          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : 'PERMISSION DESK')}</strong></div>
+          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<div className="topbar-avatar">{initialName ? initialName.charAt(0).toUpperCase() : 'B'}</div><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button></nav>}</div></div>
         </header>
 
         {view === 'requests' ? (
@@ -300,7 +393,7 @@ function App() {
                 <div className="activity-list">{requests.slice(0, 4).map((request) => <article className="activity-item" key={request.id}><span className={`activity-marker marker-${request.status}`} /><div className="activity-details"><div className="activity-type">{t(language, request.type)}</div><div className="activity-meta">{formatDate(request.date, language)} <span>·</span> {request.username}</div><StatusBadge status={request.status} language={language} /></div><ArrowRight size={15} className="activity-arrow" /></article>)}</div>
                 {requests.length === 0 && <p className="empty-copy">{t(language, 'Your requests will show up here.')}</p>}
                 <button type="button" className="text-link" onClick={openAdmin}>{t(language, 'Open request log')} <ArrowRight size={15} /></button>
-                <div className="note-panel"><div className="note-mark">“</div><p>{t(language, 'Plans change. A little notice helps everyone stay in sync.')}</p><span>{t(language, 'FEKAD PEOPLE TEAM')}</span></div>
+                <div className="note-panel"><div className="note-mark">“</div><p>{t(language, 'Plans change. A little notice helps everyone stay in sync.')}</p><span>{t(language, 'PEOPLE TEAM')}</span></div>
               </aside>
             </div>
           </div>
@@ -322,7 +415,7 @@ function App() {
           </div>
         )}
       </main>
-      {showAdminLogin && <div className="login-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAdminLogin(false) }}><section className="login-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title"><button type="button" className="login-close" onClick={() => setShowAdminLogin(false)} aria-label="Close sign in"><X size={17} /></button><div className="login-icon"><LockKeyhole size={19} /></div><div className="eyebrow">{t(language, 'ADMIN ACCESS')}</div><h2 id="login-title">{t(language, 'Welcome back.')}</h2><p className="login-description">{t(language, 'Sign in to review team permission requests.')}</p><form className="login-form" onSubmit={signInAdmin}><label className="field"><span>{t(language, 'Username')}</span><input autoComplete="username" value={adminUsername} onChange={(event) => setAdminUsername(event.target.value)} placeholder={t(language, 'Admin username')} required /></label><label className="field"><span>{t(language, 'Password')}</span><input type="password" autoComplete="current-password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} placeholder={t(language, 'Enter password')} required /></label>{loginError && <p className="login-error" role="alert">{t(language, loginError)}</p>}<button type="submit" className="submit-button login-submit">{t(language, 'Sign in')} <ArrowRight size={16} /></button></form><div className="demo-credentials"><strong>{t(language, 'Demo sign-in')}</strong><span>{t(language, 'Username')} <b>admin</b></span><span>{t(language, 'Password')} <b>fekad123</b></span></div></section></div>}
+      {showAdminLogin && <div className="login-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAdminLogin(false) }}><section className="login-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title"><button type="button" className="login-close" onClick={() => setShowAdminLogin(false)} aria-label="Close sign in"><X size={17} /></button><div className="login-icon"><LockKeyhole size={19} /></div><div className="eyebrow">{t(language, 'ADMIN ACCESS')}</div><h2 id="login-title">{t(language, 'Welcome back.')}</h2><p className="login-description">{t(language, 'Sign in to review team permission requests.')}</p><form className="login-form" onSubmit={signInAdmin}><label className="field"><span>{t(language, 'Username')}</span><input autoComplete="username" value={adminUsername} onChange={(event) => setAdminUsername(event.target.value)} placeholder={t(language, 'Admin username')} required /></label><label className="field"><span>{t(language, 'Password')}</span><input type="password" autoComplete="current-password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} placeholder={t(language, 'Enter password')} required /></label>{loginError && <p className="login-error" role="alert">{t(language, loginError)}</p>}<button type="submit" className="submit-button login-submit">{t(language, 'Sign in')} <ArrowRight size={16} /></button></form></section></div>}
       {toast && <div className="toast" role="status"><span><Check size={16} /></span>{toast}<button type="button" onClick={() => setToast('')} aria-label="Dismiss notification"><X size={15} /></button></div>}
       <button className="mobile-new-button" onClick={() => setView('requests')} aria-label="Create a request"><Plus size={21} /></button>
     </div>

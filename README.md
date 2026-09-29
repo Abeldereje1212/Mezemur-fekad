@@ -1,4 +1,4 @@
-# Fekad Permission Desk
+# Birhane Hiwot Permission Desk
 
 A responsive Telegram Mini App prototype for requesting time away and reviewing requests as an admin.
 
@@ -6,8 +6,10 @@ A responsive Telegram Mini App prototype for requesting time away and reviewing 
 
 ```sh
 npm install
-npm run dev
+npm run dev:vercel
 ```
+
+The Vercel dev server runs the frontend and `/api` functions together. Plain `npm run dev` serves only the Vite UI and uses browser-local sample data for preview.
 
 To check the production build:
 
@@ -27,13 +29,19 @@ npm run build
 
 ## Prototype data
 
-Requests are saved in this browser's `localStorage`, with sample requests provided on first load. The admin and requester screens share data only in the same browser profile; this is not a multi-user backend. The phone number is entered by the user because Telegram does not expose it through the Mini App profile by default.
+When the API is configured, requests are stored in MongoDB and shared between employees and admins. Employees must open the app through Telegram so the server can verify Telegram's signed Mini App data and show each person only their own requests. The phone number is entered by the employee because Telegram does not provide it through Mini App profile data. Plain Vite development mode uses browser-local sample data only.
 
-Before using this with a team, connect a backend or bot API for shared request storage, validate Telegram `initData` on the server, and enforce admin permissions server-side. The in-app admin switch is for trying the workflow and is not an access control mechanism.
+## Configure services
 
-## Admin demo sign-in
+Copy `.env.example` to `.env.local` for local Vercel development. Set these values in `.env.local` and in the Vercel project's **Settings → Environment Variables** for Production and Preview:
 
-- Username: `admin`
-- Password: `fekad123`
+- `MONGODB_URI`: the full MongoDB Atlas connection URI, including a database user and password.
+- `MONGODB_DB`: database name; defaults to `birhane_hiwot`.
+- `TELEGRAM_BOT_TOKEN`: the bot token used to verify Telegram Mini App `initData`.
+- `ADMIN_USERNAME`: the admin login username.
+- `ADMIN_PASSWORD`: a unique, strong admin password.
+- `SESSION_SECRET`: a random secret of at least 32 characters used to sign the HTTP-only admin session cookie.
 
-These demo credentials are checked in the frontend and are visible in the app source. They only demonstrate the sign-in flow and do not secure the admin screen. Replace this with backend authentication and server-enforced authorization before deployment; never use these demo credentials for a real account.
+Do not commit `.env.local` or put secrets in `VITE_` variables; those are bundled into browser code. In MongoDB Atlas, create a database user and allow connections from Vercel in Network Access. Never use a publicly exposed database password.
+
+Admin sign-in and request review run through Vercel API functions. Employees' submissions are associated with their verified Telegram account, and admins receive a signed, HTTP-only session cookie. The Telegram bot's Mini App URL must point to the deployed HTTPS URL.
