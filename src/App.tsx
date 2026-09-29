@@ -282,7 +282,7 @@ function App() {
         headers: { 'Content-Type': 'application/json', ...telegramHeaders() },
         body: JSON.stringify({ name, phone, type, date, reason }),
       })
-      if (import.meta.env.DEV && response.status === 404) {
+      if (import.meta.env.DEV && (response.status === 404 || response.status === 401)) {
         const localRequest: PermissionRequest = {
           id: crypto.randomUUID(), name: name.trim(), username: username.trim().startsWith('@') ? username.trim() : `@${username.trim()}`,
           phone: phone.trim(), type, date, reason: reason.trim(), status: 'pending', submittedAt: new Date().toISOString(),
