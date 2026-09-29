@@ -10,6 +10,7 @@ import {
   LockKeyhole,
   LogOut,
   Menu,
+  Music2,
   Phone,
   Plus,
   Search,
@@ -20,6 +21,7 @@ import {
 import './App.css'
 
 type RequestStatus = 'pending' | 'approved' | 'rejected'
+type AppView = 'requests' | 'admin' | 'mezmur'
 type Language = 'en' | 'am'
 type PermissionType = 'Annual leave' | 'Sick leave' | 'Personal leave' | 'Late arrival' | 'Early departure' | 'Other'
 
@@ -82,6 +84,7 @@ const translations: Record<Language, Record<string, string>> = {
     'Username or password is incorrect.': 'የተጠቃሚ ስም ወይም የይለፍ ቃል ትክክል አይደለም።', 'Sign in': 'ግባ',
     'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Reviewed': 'ተገምግሟል',
     'Open navigation menu': 'የአሰሳ ምናሌ ክፈት', 'Close navigation menu': 'የአሰሳ ምናሌ ዝጋ',
+    'Mezmur': 'መዝሙር', 'MEZMUR': 'መዝሙር', 'Mezmur content will appear here.': 'የመዝሙር ይዘት እዚህ ይታያል።',
     'Permission approved.': 'ፈቃዱ ተፈቅዷል።', 'Permission rejected.': 'ፈቃዱ ውድቅ ተደርጓል።',
     'Open this app in Telegram to view your requests.': 'ጥያቄዎችዎን ለማየት መተግበሪያውን በቴሌግራም ይክፈቱ።',
     'Open this app in Telegram to submit a request.': 'ጥያቄ ለማቅረብ መተግበሪያውን በቴሌግራም ይክፈቱ።',
@@ -155,7 +158,7 @@ function App() {
   const initialName = [telegramUser?.first_name, telegramUser?.last_name].filter(Boolean).join(' ')
   const [requests, setRequests] = useState<PermissionRequest[]>(() => import.meta.env.DEV ? readRequests() : [])
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'am' ? 'am' : 'en')
-  const [view, setView] = useState<'requests' | 'admin'>('requests')
+  const [view, setView] = useState<AppView>('requests')
   const [menuOpen, setMenuOpen] = useState(false)
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const [showAdminLogin, setShowAdminLogin] = useState(false)
@@ -341,6 +344,9 @@ function App() {
             <ShieldCheck size={18} strokeWidth={1.8} /> {t(language, 'Admin review')}
             {pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}
           </button>
+          <button className={view === 'mezmur' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mezmur')}>
+            <Music2 size={18} strokeWidth={1.8} /> {t(language, 'Mezmur')}
+          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-note"><span className="online-dot" /> {t(language, 'Request desk is open')}</div>
@@ -354,8 +360,8 @@ function App() {
 
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : 'PERMISSION DESK')}</strong></div>
-          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<div className="topbar-avatar">{initialName ? initialName.charAt(0).toUpperCase() : 'B'}</div><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button></nav>}</div></div>
+          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'mezmur' ? 'MEZMUR' : 'PERMISSION DESK')}</strong></div>
+          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<div className="topbar-avatar">{initialName ? initialName.charAt(0).toUpperCase() : 'B'}</div><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button></nav>}</div></div>
         </header>
 
         {view === 'requests' ? (
@@ -398,7 +404,7 @@ function App() {
               </aside>
             </div>
           </div>
-        ) : (
+        ) : view === 'admin' ? (
           <div className="page-content admin-content">
             <section className="page-heading admin-heading">
               <div><div className="eyebrow"><span className="eyebrow-line" /> {t(language, 'PEOPLE OPERATIONS / ADMIN')}</div><h1>{t(language, 'Request log')}<span className="heading-period">.</span></h1><p>{t(language, 'Review requests and keep the team moving.')}</p></div>
@@ -413,6 +419,13 @@ function App() {
               <div className="table-foot"><span>{language === 'am' ? `${filteredRequests.length} ከ ${requests.length} ጥያቄዎች እየታዩ ነው` : `Showing ${filteredRequests.length} of ${requests.length} requests`}</span><span><span className="online-dot" /> {t(language, 'Up to date')}</span></div>
             </section>
             <div className="admin-footnote"><ShieldCheck size={16} /> {t(language, 'Decisions update the request status immediately for the person who submitted it.')}</div>
+          </div>
+        ) : (
+          <div className="page-content mezmur-content">
+            <section className="page-heading">
+              <div><div className="eyebrow"><span className="eyebrow-line" /> BIRHANE HIWOT</div><h1>{t(language, 'Mezmur')}<span className="heading-period">.</span></h1><p>{t(language, 'Mezmur content will appear here.')}</p></div>
+            </section>
+            <div className="mezmur-rule"><Music2 size={20} strokeWidth={1.6} /><span>{t(language, 'Mezmur')}</span></div>
           </div>
         )}
       </main>
