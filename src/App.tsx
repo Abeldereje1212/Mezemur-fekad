@@ -37,6 +37,12 @@ interface PermissionRequest {
   submittedAt: string
 }
 
+interface LyricsBox {
+  id: string
+  title: string
+  lyrics: string
+}
+
 interface TelegramUser {
   id?: number
   first_name?: string
@@ -52,6 +58,7 @@ declare global {
 
 const STORAGE_KEY = 'fekad-permission-requests'
 const LANGUAGE_KEY = 'fekad-language'
+const LYRICS_STORAGE_KEY = 'birhane-hiwot-mezmur-lyrics'
 const permissionTypes: PermissionType[] = ['Annual leave', 'Sick leave', 'Personal leave', 'Late arrival', 'Early departure', 'Other']
 const today = new Date()
 const translations: Record<Language, Record<string, string>> = {
@@ -84,7 +91,9 @@ const translations: Record<Language, Record<string, string>> = {
     'Username or password is incorrect.': 'የተጠቃሚ ስም ወይም የይለፍ ቃል ትክክል አይደለም።', 'Sign in': 'ግባ',
     'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Reviewed': 'ተገምግሟል',
     'Open navigation menu': 'የአሰሳ ምናሌ ክፈት', 'Close navigation menu': 'የአሰሳ ምናሌ ዝጋ',
-    'Mezmur': 'መዝሙር', 'MEZMUR': 'መዝሙር', 'Mezmur content will appear here.': 'የመዝሙር ይዘት እዚህ ይታያል።',
+    'Mezmur': 'መዝሙር', 'MEZMUR': 'መዝሙር', 'Keep song lyrics together in one place.': 'የመዝሙር ግጥሞችን በአንድ ቦታ ያስቀምጡ።',
+    'Add lyrics box': 'የግጥም ሳጥን ጨምር', 'Song title': 'የመዝሙሩ ርዕስ', 'Lyrics': 'ግጥም',
+    'Write or paste the lyrics here...': 'ግጥሙን እዚህ ይጻፉ ወይም ይለጥፉ...', 'Remove lyrics box': 'የግጥም ሳጥን አስወግድ',
     'Permission approved.': 'ፈቃዱ ተፈቅዷል።', 'Permission rejected.': 'ፈቃዱ ውድቅ ተደርጓል።',
     'Open this app in Telegram to view your requests.': 'ጥያቄዎችዎን ለማየት መተግበሪያውን በቴሌግራም ይክፈቱ።',
     'Open this app in Telegram to submit a request.': 'ጥያቄ ለማቅረብ መተግበሪያውን በቴሌግራም ይክፈቱ።',
@@ -139,6 +148,16 @@ function readRequests(): PermissionRequest[] {
   }
 }
 
+function readLyricsBoxes(): LyricsBox[] {
+  try {
+    const saved = localStorage.getItem(LYRICS_STORAGE_KEY)
+    const boxes = saved ? JSON.parse(saved) as LyricsBox[] : []
+    return boxes.length > 0 ? boxes : [{ id: crypto.randomUUID(), title: '', lyrics: '' }]
+  } catch {
+    return [{ id: crypto.randomUUID(), title: '', lyrics: '' }]
+  }
+}
+
 function formatDate(value: string, language: Language) {
   if (!value) return 'No date'
   return new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T00:00:00`))
@@ -157,6 +176,7 @@ function App() {
   const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
   const initialName = [telegramUser?.first_name, telegramUser?.last_name].filter(Boolean).join(' ')
   const [requests, setRequests] = useState<PermissionRequest[]>(() => import.meta.env.DEV ? readRequests() : [])
+  const [lyricsBoxes, setLyricsBoxes] = useState<LyricsBox[]>(readLyricsBoxes)
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'am' ? 'am' : 'en')
   const [view, setView] = useState<AppView>('requests')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -211,6 +231,10 @@ function App() {
     document.documentElement.dataset.language = language
   }, [language])
 
+  useEffect(() => {
+    localStorage.setItem(LYRICS_STORAGE_KEY, JSON.stringify(lyricsBoxes))
+  }, [lyricsBoxes])
+
   const todayLabel = new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', { weekday: 'short', day: 'numeric', month: 'short' }).format(today)
 
   useEffect(() => {
@@ -235,6 +259,18 @@ function App() {
     }
     setLoginError('')
     setShowAdminLogin(true)
+  }
+
+  function updateLyricsBox(id: string, field: 'title' | 'lyrics', value: string) {
+    setLyricsBoxes((current) => current.map((box) => box.id === id ? { ...box, [field]: value } : box))
+  }
+
+  function addLyricsBox() {
+    setLyricsBoxes((current) => [...current, { id: crypto.randomUUID(), title: '', lyrics: '' }])
+  }
+
+  function removeLyricsBox(id: string) {
+    setLyricsBoxes((current) => current.filter((box) => box.id !== id))
   }
 
   async function signInAdmin(event: FormEvent<HTMLFormElement>) {
@@ -422,10 +458,18 @@ function App() {
           </div>
         ) : (
           <div className="page-content mezmur-content">
-            <section className="page-heading">
-              <div><div className="eyebrow"><span className="eyebrow-line" /> BIRHANE HIWOT</div><h1>{t(language, 'Mezmur')}<span className="heading-period">.</span></h1><p>{t(language, 'Mezmur content will appear here.')}</p></div>
+            <section className="page-heading mezmur-heading">
+              <div><div className="eyebrow"><span className="eyebrow-line" /> BIRHANE HIWOT</div><h1>{t(language, 'Mezmur')}<span className="heading-period">.</span></h1><p>{t(language, 'Keep song lyrics together in one place.')}</p></div>
+              <button type="button" className="submit-button add-lyrics-button" onClick={addLyricsBox}><Plus size={16} /> {t(language, 'Add lyrics box')}</button>
             </section>
-            <div className="mezmur-rule"><Music2 size={20} strokeWidth={1.6} /><span>{t(language, 'Mezmur')}</span></div>
+            <section className="lyrics-grid" aria-label={t(language, 'Mezmur')}>
+              {lyricsBoxes.map((box, index) => <article className="lyrics-box" key={box.id}>
+                <div className="lyrics-box-heading"><span><Music2 size={16} /> {t(language, 'Lyrics')} {String(index + 1).padStart(2, '0')}</span><button type="button" className="remove-lyrics-button" onClick={() => removeLyricsBox(box.id)} aria-label={`${t(language, 'Remove lyrics box')} ${index + 1}`} title={t(language, 'Remove lyrics box')}><X size={16} /></button></div>
+                <label className="field"><span>{t(language, 'Song title')}</span><input value={box.title} onChange={(event) => updateLyricsBox(box.id, 'title', event.target.value)} placeholder={t(language, 'Song title')} /></label>
+                <label className="field lyrics-text-field"><span>{t(language, 'Lyrics')}</span><textarea value={box.lyrics} onChange={(event) => updateLyricsBox(box.id, 'lyrics', event.target.value)} placeholder={t(language, 'Write or paste the lyrics here...')} rows={8} /></label>
+              </article>)}
+              {lyricsBoxes.length === 0 && <button type="button" className="empty-lyrics-button" onClick={addLyricsBox}><Plus size={17} /> {t(language, 'Add lyrics box')}</button>}
+            </section>
           </div>
         )}
       </main>

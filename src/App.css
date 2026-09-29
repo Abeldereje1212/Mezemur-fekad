@@ -134,6 +134,20 @@
 .note-panel p { max-width: 205px; margin: 0; color: #435b48; font: 400 14px/1.45 var(--display); }
 .note-panel > span { margin-top: 13px; display: block; color: #728371; font-size: 8px; font-weight: 750; letter-spacing: 1px; }
 
+.mezmur-heading { align-items: flex-end; margin-bottom: 25px; }
+.add-lyrics-button { flex: 0 0 auto; margin-bottom: 3px; }
+.lyrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; align-items: start; }
+.lyrics-box { min-width: 0; padding: 18px; border: 1px solid var(--line); background: #fffefa; animation: enter .3s ease-out both; }
+.lyrics-box-heading { min-height: 27px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; color: #657668; font-size: 9px; font-weight: 750; letter-spacing: .7px; text-transform: uppercase; }
+.lyrics-box-heading > span { display: inline-flex; align-items: center; gap: 7px; }
+.lyrics-box-heading svg { color: #66866c; }
+.lyrics-box .field + .field { margin-top: 13px; }
+.lyrics-box .lyrics-text-field textarea { min-height: 190px; line-height: 1.7; white-space: pre-wrap; }
+.remove-lyrics-button { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 3px; background: transparent; color: #969c91; cursor: pointer; }
+.remove-lyrics-button:hover { border-color: #ebd8d1; background: #f8eeea; color: #a85f4f; }
+.empty-lyrics-button { min-height: 100px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px dashed #cdd7cb; background: transparent; color: #507456; font-size: 11px; cursor: pointer; }
+.empty-lyrics-button:hover { background: #f1f4ed; }
+
 .admin-heading { margin-bottom: 25px; }
 .admin-count { min-width: 172px; margin-bottom: 4px; padding: 10px 14px; border-left: 2px solid #d0a452; background: #f4f0e4; }
 .admin-count > span { display: block; color: #8b826b; font-size: 8px; font-weight: 750; letter-spacing: .9px; }
@@ -285,6 +299,12 @@ td .status-badge { margin-top: 0; }
   .note-panel { margin-top: 19px; }
   .mobile-new-button { display: none; }
   .admin-heading { margin-bottom: 17px; }
+  .mezmur-heading { gap: 12px; align-items: flex-start; }
+  .mezmur-heading .add-lyrics-button { margin-top: 0; padding-inline: 9px; gap: 6px; font-size: 9px; }
+  .mezmur-heading .add-lyrics-button svg { width: 14px; height: 14px; }
+  .lyrics-grid { grid-template-columns: 1fr; gap: 11px; }
+  .lyrics-box { padding: 15px; }
+  .lyrics-box .lyrics-text-field textarea { min-height: 170px; }
   .admin-count { min-width: 100px; padding: 8px; }
   .admin-count > span { font-size: 7px; }
   .admin-count strong { font-size: 16px; }
