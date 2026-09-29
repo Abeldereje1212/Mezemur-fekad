@@ -43,6 +43,8 @@
 .breadcrumb strong { color: #626b63; font-size: 9px; }
 .crumb-slash { color: #c9c9bf; }
 .topbar-right { display: flex; align-items: center; gap: 17px; }
+.language-toggle { min-width: 38px; height: 29px; padding: 0 8px; display: grid; place-items: center; border: 1px solid #dfe4d9; border-radius: 3px; background: #fffefa; color: #456a4d; font: 700 10px var(--sans); cursor: pointer; transition: background .15s, border-color .15s; }
+.language-toggle:hover { border-color: #9fb69d; background: #edf2e9; }
 .topbar-date { display: flex; align-items: center; gap: 7px; color: #777f77; font-size: 10px; }
 .topbar-date svg { color: #768a78; }
 .topbar-logout { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 3px; background: transparent; color: #718171; cursor: pointer; }
@@ -314,3 +316,5 @@ td .status-badge { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+:root[data-language='am'] { --sans: 'Nyala', 'Noto Sans Ethiopic', 'Abyssinica SIL', 'Avenir Next', sans-serif; --display: 'Nyala', 'Noto Serif Ethiopic', Georgia, serif; }

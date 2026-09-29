@@ -23,6 +23,7 @@ npm run build
 - Admin filters by employee name, Telegram username, and requested date.
 - Telegram WebApp bridge initialization and profile name/username prefill when opened in Telegram.
 - Responsive layout for desktop and Telegram's mobile webview.
+- English and Amharic interface language switch; the selected language is saved in the browser.
 
 ## Prototype data
 
