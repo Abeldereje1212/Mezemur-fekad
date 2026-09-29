@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:vercel": "npx vercel dev",
+    "dev:vercel": "dotenv -e .env.local -- npx vercel dev",
     "build": "tsc -b && tsc -p tsconfig.api.json && vite build",
     "typecheck:api": "tsc -p tsconfig.api.json",
     "lint": "oxlint",
@@ -22,6 +22,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "dotenv-cli": "^11.0.0",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
