@@ -64,6 +64,8 @@ const today = new Date()
 const translations: Record<Language, Record<string, string>> = {
   en: {},
   am: {
+    'Saved in this browser only. This request was not sent to the admin.': 'በዚህ አሳሽ ብቻ ተቀምጧል። ጥያቄው ለአስተዳዳሪው አልተላከም።',
+    'Request statuses refresh automatically every 10 seconds.': 'የጥያቄዎች ሁኔታ በየ10 ሰከንዱ በራስ ሰር ይዘምናል።',
     'WORKPLACE': 'የሥራ ቦታ', 'WORKSPACE': 'የሥራ ቦታ', 'My requests': 'የእኔ ፈቃዶች', 'Admin review': 'የአስተዳዳሪ ግምገማ',
     'Request desk is open': 'የፈቃድ ጥያቄ ክፍት ነው', 'ADMIN REVIEW': 'የአስተዳዳሪ ግምገማ', 'PERMISSION DESK': 'የፈቃድ ጥያቄ',
     'PEOPLE OPERATIONS': 'የሰራተኞች አስተዳደር', 'Permission desk': 'የፈቃድ ጥያቄ', 'Request time away and keep track of every update.': 'የፈቃድ ጥያቄ ያቅርቡ እና ሁኔታውን ይከታተሉ።',
@@ -226,6 +228,39 @@ function App() {
   }, [language])
 
   useEffect(() => {
+    const controller = new AbortController()
+    let refreshing = false
+    async function refreshRequests() {
+      if (document.visibilityState === 'hidden' || refreshing) return
+      refreshing = true
+      try {
+        const response = await fetch('/api/requests', {
+          headers: telegramHeaders(), cache: 'no-store', signal: controller.signal,
+        })
+        if (!response.ok) return
+        const result = await response.json() as { role: 'admin' | 'user'; requests: PermissionRequest[] }
+        if (!controller.signal.aborted && (result.role === 'admin') === adminAuthenticated) {
+          setRequests(result.requests)
+        }
+      } catch {
+        // Keep the last loaded requests during temporary outages; retry on the next refresh.
+      } finally {
+        refreshing = false
+      }
+    }
+    const interval = window.setInterval(() => { void refreshRequests() }, 10_000)
+    const onVisible = () => { void refreshRequests() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      controller.abort()
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [adminAuthenticated])
+
+  useEffect(() => {
     localStorage.setItem(LANGUAGE_KEY, language)
     document.documentElement.lang = language === 'am' ? 'am' : 'en'
     document.documentElement.dataset.language = language
@@ -322,7 +357,7 @@ function App() {
         headers: { 'Content-Type': 'application/json', ...telegramHeaders() },
         body: JSON.stringify({ name, phone, type, date, reason }),
       })
-      if (import.meta.env.DEV && (response.status === 404 || response.status === 401)) {
+      if (import.meta.env.DEV && response.status === 404) {
         const localRequest: PermissionRequest = {
           id: crypto.randomUUID(), name: name.trim(), username: username.trim().startsWith('@') ? username.trim() : `@${username.trim()}`,
           phone: phone.trim(), type, date, reason: reason.trim(), status: 'pending', submittedAt: new Date().toISOString(),
@@ -330,6 +365,9 @@ function App() {
         const updated = [localRequest, ...requests]
         setRequests(updated)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+        setReason('')
+        setToast(t(language, 'Saved in this browser only. This request was not sent to the admin.'))
+        return
       } else {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Could not submit the request.')
@@ -454,7 +492,7 @@ function App() {
                 {filteredRequests.length === 0 && <div className="table-empty"><Search size={20} /><strong>{t(language, 'No requests found')}</strong><span>{t(language, 'Try a different name, username, or date.')}</span></div>}</div>
               <div className="table-foot"><span>{language === 'am' ? `${filteredRequests.length} ከ ${requests.length} ጥያቄዎች እየታዩ ነው` : `Showing ${filteredRequests.length} of ${requests.length} requests`}</span><span><span className="online-dot" /> {t(language, 'Up to date')}</span></div>
             </section>
-            <div className="admin-footnote"><ShieldCheck size={16} /> {t(language, 'Decisions update the request status immediately for the person who submitted it.')}</div>
+            <div className="admin-footnote"><ShieldCheck size={16} /> {t(language, 'Request statuses refresh automatically every 10 seconds.')}</div>
           </div>
         ) : (
           <div className="page-content mezmur-content">

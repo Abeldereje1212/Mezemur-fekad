@@ -25,14 +25,14 @@ export default async function handler(request: VercelRequest, response: VercelRe
       const telegramUser = getTelegramUser(request)
       if (!telegramUser) return response.status(401).json({ error: 'Open this app in Telegram to submit a request.' })
 
-      const { name, username, phone, type, date, reason } = request.body ?? {}
-      if (typeof name !== 'string' || name.trim().length < 2 || name.length > 120 || typeof username !== 'string' || username.trim().length > 120 || typeof phone !== 'string' || phone.trim().length < 5 || phone.length > 40 || typeof type !== 'string' || !permissionTypes.has(type) || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof reason !== 'string' || reason.trim().length < 2 || reason.length > 2000) {
+      const { name, phone, type, date, reason } = request.body ?? {}
+      if (typeof name !== 'string' || name.trim().length < 2 || name.length > 120 || typeof phone !== 'string' || phone.trim().length < 5 || phone.length > 40 || typeof type !== 'string' || !permissionTypes.has(type) || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof reason !== 'string' || reason.trim().length < 2 || reason.length > 2000) {
         return response.status(400).json({ error: 'Please provide valid request details.' })
       }
 
       const record: PermissionRecord = {
         name: name.trim(),
-        username: telegramUser.username ? `@${telegramUser.username}` : username.trim().replace(/^@/, '') ? `@${username.trim().replace(/^@/, '')}` : 'Telegram user',
+        username: telegramUser.username ? `@${telegramUser.username}` : 'Telegram user',
         phone: phone.trim(),
         type,
         date,
