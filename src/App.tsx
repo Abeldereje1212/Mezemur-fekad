@@ -196,6 +196,7 @@ function App() {
   const [type, setType] = useState<PermissionType>('Annual leave')
   const [date, setDate] = useState(localDate(1))
   const [reason, setReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
 
@@ -374,6 +375,8 @@ function App() {
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submitting) return
+    setSubmitting(true)
     try {
       const response = await fetch('/api/requests', {
         method: 'POST',
@@ -400,6 +403,8 @@ function App() {
       setToast(t(language, 'Your request has been sent to the admin.'))
     } catch (error) {
       setToast(t(language, error instanceof Error ? error.message : 'Could not submit the request.'))
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -480,16 +485,16 @@ function App() {
               <section className="form-panel">
                 <div className="panel-heading"><div><div className="eyebrow">{t(language, 'NEW SUBMISSION')}</div><h2>{t(language, 'Request permission')}</h2></div><span className="panel-index">01 <span>/ 02</span></span></div>
                 <p className="panel-description">{t(language, 'Share the details below. Your admin will review and get back to you.')}</p>
-                <form className="request-form" onSubmit={submitRequest} onInvalidCapture={() => setToast(t(language, 'Please complete all required fields.'))}>
+                <form className="request-form" onSubmit={submitRequest} onInvalidCapture={(event) => { event.preventDefault(); setToast(t(language, 'Please complete all required fields.')) }}>
                   <label className="field"><span>{t(language, 'Permission type')}</span><span className="select-wrap"><select value={type} onChange={(event) => setType(event.target.value as PermissionType)}>{permissionTypes.map((permissionType) => <option key={permissionType} value={permissionType}>{t(language, permissionType)}</option>)}</select><ChevronDown size={16} /></span></label>
                   <label className="field"><span>{t(language, 'Date needed')}</span><span className="input-icon-wrap"><input type="date" value={date} min={localDate()} onChange={(event) => setDate(event.target.value)} required /><CalendarDays size={16} /></span></label>
                   <div className="field-pair">
-                    <label className="field"><span>{t(language, 'Your name')}</span><span className="input-icon-wrap"><input value={name} onChange={(event) => setName(event.target.value)} placeholder={t(language, 'Full name')} required /><UserRound size={16} /></span></label>
+                    <label className="field"><span>{t(language, 'Your name')}</span><span className="input-icon-wrap"><input value={name} onChange={(event) => setName(event.target.value)} placeholder={t(language, 'Full name')} required minLength={2} /><UserRound size={16} /></span></label>
                     <label className="field"><span>{t(language, 'Telegram username')}</span><input value={username} onChange={(event) => setUsername(event.target.value.replace(/^@/, ''))} placeholder="@username" required /></label>
                   </div>
-                  <label className="field"><span>{t(language, 'Phone number')}</span><span className="input-icon-wrap"><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+251 9XX XXX XXX" required /><Phone size={16} /></span></label>
-                  <label className="field"><span>{t(language, 'Reason')} <span className="field-hint">{t(language, 'Give your admin a little context')}</span></span><textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder={t(language, 'What do you need permission for?')} rows={3} required /></label>
-                  <div className="form-footer"><span>{t(language, 'By submitting, this will be shared with your admin.')}</span><button className="submit-button" type="submit">{t(language, 'Send request')} <ArrowRight size={16} /></button></div>
+                  <label className="field"><span>{t(language, 'Phone number')}</span><span className="input-icon-wrap"><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+251 9XX XXX XXX" required minLength={5} /><Phone size={16} /></span></label>
+                  <label className="field"><span>{t(language, 'Reason')} <span className="field-hint">{t(language, 'Give your admin a little context')}</span></span><textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder={t(language, 'What do you need permission for?')} rows={3} required minLength={2} /></label>
+                  <div className="form-footer"><span>{t(language, 'By submitting, this will be shared with your admin.')}</span><button className="submit-button" type="submit" disabled={submitting}>{submitting ? (language === 'am' ? 'በመላክ ላይ…' : 'Sending…') : t(language, 'Send request')} {!submitting && <ArrowRight size={16} />}</button></div>
                 </form>
               </section>
 
