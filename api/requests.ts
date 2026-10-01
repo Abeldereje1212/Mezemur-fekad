@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb'
 import type { VercelRequest, VercelResponse } from './_lib/http.js'
 import { permissionRequests, toPermissionRequest, type PermissionRecord } from './_lib/mongo.js'
-import { getTelegramUser, isAdmin, telegramAuthFailure } from './_lib/security.js'
+import { getTelegramUser, isAdmin } from './_lib/security.js'
 
 const permissionTypes = new Set(['Annual leave', 'Sick leave', 'Personal leave', 'Late arrival', 'Early departure', 'Other'])
 
@@ -16,8 +16,8 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
       const telegramUser = getTelegramUser(request)
       if (!telegramUser) {
-        const { status, ...failure } = telegramAuthFailure(request)
-        return response.status(status).json(failure)
+        // Browser users without Telegram auth get an empty list — they can still submit requests
+        return response.status(200).json({ role: 'user', requests: [] })
       }
       const collection = await permissionRequests()
       const records = await collection.find({ telegramId: telegramUser.id }).sort({ submittedAt: -1 }).limit(100).toArray()
@@ -26,26 +26,34 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
     if (request.method === 'POST') {
       const telegramUser = getTelegramUser(request)
-      if (!telegramUser) {
-        const { status, ...failure } = telegramAuthFailure(request)
-        return response.status(status).json(failure)
-      }
 
-      const { name, phone, type, date, reason } = request.body ?? {}
+      const { name, phone, type, date, reason, username: bodyUsername } = request.body ?? {}
       if (typeof name !== 'string' || name.trim().length < 2 || name.length > 120 || typeof phone !== 'string' || phone.trim().length < 5 || phone.length > 40 || typeof type !== 'string' || !permissionTypes.has(type) || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof reason !== 'string' || reason.trim().length < 2 || reason.length > 2000) {
         return response.status(400).json({ error: 'Please provide valid request details.' })
       }
 
+      let resolvedUsername: string
+      let resolvedTelegramId: string
+      if (telegramUser) {
+        resolvedUsername = telegramUser.username ? `@${telegramUser.username}` : 'Telegram user'
+        resolvedTelegramId = telegramUser.id
+      } else {
+        resolvedUsername = typeof bodyUsername === 'string' && bodyUsername.trim().length > 0
+          ? (bodyUsername.trim().startsWith('@') ? bodyUsername.trim() : `@${bodyUsername.trim()}`)
+          : 'Browser user'
+        resolvedTelegramId = `browser-${Date.now()}`
+      }
+
       const record: PermissionRecord = {
         name: name.trim(),
-        username: telegramUser.username ? `@${telegramUser.username}` : 'Telegram user',
+        username: resolvedUsername,
         phone: phone.trim(),
         type,
         date,
         reason: reason.trim(),
         status: 'pending',
         submittedAt: new Date().toISOString(),
-        telegramId: telegramUser.id,
+        telegramId: resolvedTelegramId,
       }
       const collection = await permissionRequests()
       const result = await collection.insertOne(record)

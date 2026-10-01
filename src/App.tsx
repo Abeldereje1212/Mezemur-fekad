@@ -381,7 +381,7 @@ function App() {
       const response = await fetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...telegramHeaders() },
-        body: JSON.stringify({ name, phone, type, date, reason }),
+        body: JSON.stringify({ name, username: username.trim().startsWith('@') ? username.trim() : `@${username.trim()}`, phone, type, date, reason }),
       })
       if (import.meta.env.DEV && response.status === 404) {
         const localRequest: PermissionRequest = {
