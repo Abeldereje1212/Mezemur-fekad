@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   ArrowRight,
+  Bell,
   CalendarDays,
   Check,
   ChevronDown,
@@ -13,17 +14,40 @@ import {
   Music2,
   Phone,
   Plus,
+  Radio,
   Search,
+  Send,
   ShieldCheck,
   UserRound,
+  Users,
   X,
 } from 'lucide-react'
 import './App.css'
 
 type RequestStatus = 'pending' | 'approved' | 'rejected'
-type AppView = 'requests' | 'admin' | 'mezmur'
+type AppView = 'requests' | 'admin' | 'notifier' | 'mezmur'
 type Language = 'en' | 'am'
 type PermissionType = 'Annual leave' | 'Sick leave' | 'Personal leave' | 'Late arrival' | 'Early departure' | 'Other'
+
+interface SubscriberUser {
+  telegramId: string
+  username?: string
+  firstName?: string
+  lastName?: string
+  lastNotifiedAt: string
+  visitCount: number
+}
+
+interface NotificationHistoryItem {
+  id?: string
+  title?: string
+  message: string
+  target: string
+  targetName?: string
+  sentCount: number
+  failedCount: number
+  sentAt: string
+}
 
 interface PermissionRequest {
   id: string
@@ -58,7 +82,7 @@ declare global {
 
 const STORAGE_KEY = 'fekad-permission-requests'
 const LANGUAGE_KEY = 'fekad-language'
-const LYRICS_STORAGE_KEY = 'birhane-hiwot-mezmur-lyrics'
+
 const permissionTypes: PermissionType[] = ['Annual leave', 'Sick leave', 'Personal leave', 'Late arrival', 'Early departure', 'Other']
 const today = new Date()
 const translations: Record<Language, Record<string, string>> = {
@@ -107,6 +131,45 @@ const translations: Record<Language, Record<string, string>> = {
     'Could not update request status.': 'የጥያቄውን ሁኔታ ማዘመን አልተቻለም።',
     'Request was not found or was already reviewed.': 'ጥያቄው አልተገኘም ወይም አስቀድሞ ተገምግሟል።',
     'Please complete all required fields.': 'እባክዎ ሁሉንም አስፈላጊ መረጃዎች ይሙሉ።',
+    'Lyrics saved.': 'ግጥሙ ተቀምጧል።',
+    'Could not save lyrics.': 'ግጥሙን ማስቀመጥ አልተቻለም።',
+    'Could not add lyrics.': 'ግጥም መጨመር አልተቻለም።',
+    'Could not remove lyrics.': 'ግጥም ማስወገድ አልተቻለም።',
+    'No lyrics have been added yet.': 'ገና ምንም ግጥም አልተጨመረም።',
+    'Untitled': 'ርዕስ የሌለው',
+    'No lyrics yet.': 'ገና ግጥም የለም።',
+    'Notifier': 'የማሳወቂያ ክፍል',
+    'NOTIFIER PANEL': 'የማሳወቂያ ክፍል',
+    'Telegram notifier': 'የቴሌግራም መልእክት ማስተላለፊያ',
+    'Broadcast announcements and direct notifications to Telegram users.': 'አጠቃላይ ማስታወቂያዎችን ወይም ቀጥታ መልእክቶችን ለቴሌግራም ተጠቃሚዎች ያስተላልፉ።',
+    'TOTAL SUBSCRIBERS': 'ጠቅላላ ተጠቃሚዎች',
+    'ACTIVE BOT USERS': 'ንቁ ተጠቃሚዎች',
+    'BOT STATUS': 'የቦት ሁኔታ',
+    'Online & Ready': 'ዝግጁ ነው',
+    'Compose notification': 'መልእክት ማዘጋጃ',
+    'Create and send a notification through the Telegram bot.': 'በቴሌግራም ቦቱ አማካኝነት የሚተላለፍ መልእክት ያዘጋጁ።',
+    'Target audience': 'የመልእክቱ ተቀባይ',
+    'All bot members': 'ሁሉም የቦት ተጠቃሚዎች',
+    'Single user': 'ለአንድ ተጠቃሚ',
+    'Quick templates': 'ፈጣን አብነቶች',
+    'General announcement': 'አጠቃላይ ማስታወቂያ',
+    'Rehearsal reminder': 'የመዝሙር ልምምድ',
+    'Service notice': 'የአገልግሎት ጥሪ',
+    'Notification title (optional)': 'የማሳወቂያ ርዕስ (አማራጭ)',
+    'Write your message...': 'የመልእክቱን ዝርዝር እዚህ ይጻፉ...',
+    'Live Telegram preview': 'የቴሌግራም ቅድመ-እይታ',
+    'Send notification': 'መልእክቱን አስተላልፍ',
+    'Sending...': 'በመላክ ላይ...',
+    'Subscribers & visitors': 'ተጠቃሚዎች እና ጎብኝዎች',
+    'People who opened the Mini App': 'ይህንን መተግበሪያ የከፈቱ ሰዎች',
+    'Direct message': 'መልእክት ጻፍ',
+    'Recent broadcasts': 'የቅርብ ጊዜ መልእክቶች',
+    'No broadcasts sent yet.': 'እስካሁን የተላከ መልእክት የለም።',
+    'No subscribers found.': 'ምንም ተጠቃሚዎች አልተገኙም።',
+    'Notification sent successfully!': 'ማሳወቂያው በተሳካ ሁኔታ ተልኳል!',
+    'Requests remain visible for at least 7 days.': 'ያቀረቧቸው ጥያቄዎች ቢያንስ ለ1 ሳምንት እዚህ ይታያሉ።',
+    'Visible for at least 7 days': 'ቢያንስ ለ1 ሳምንት የሚቆይ',
+    'Submitted on': 'የተላከው',
   },
 }
 
@@ -141,22 +204,29 @@ const sampleRequests: PermissionRequest[] = [
   },
 ]
 
-function readRequests(): PermissionRequest[] {
+function getClientId(): string {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) as PermissionRequest[] : sampleRequests
+    let id = localStorage.getItem('fekad-client-id')
+    if (!id) {
+      id = `client-${crypto.randomUUID()}`
+      localStorage.setItem('fekad-client-id', id)
+    }
+    return id
   } catch {
-    return sampleRequests
+    return 'client-fallback'
   }
 }
 
-function readLyricsBoxes(): LyricsBox[] {
+function readRequests(): PermissionRequest[] {
   try {
-    const saved = localStorage.getItem(LYRICS_STORAGE_KEY)
-    const boxes = saved ? JSON.parse(saved) as LyricsBox[] : []
-    return boxes.length > 0 ? boxes : [{ id: crypto.randomUUID(), title: '', lyrics: '' }]
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved) as PermissionRequest[]
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+    return import.meta.env.DEV ? sampleRequests : []
   } catch {
-    return [{ id: crypto.randomUUID(), title: '', lyrics: '' }]
+    return import.meta.env.DEV ? sampleRequests : []
   }
 }
 
@@ -171,14 +241,19 @@ function StatusBadge({ status, language }: { status: RequestStatus; language: La
 
 function telegramHeaders(): Record<string, string> {
   const initData = window.Telegram?.WebApp?.initData
-  return initData ? { 'x-telegram-init-data': initData } : {}
+  const headers: Record<string, string> = {
+    'x-client-id': getClientId(),
+  }
+  if (initData) headers['x-telegram-init-data'] = initData
+  return headers
 }
 
 function App() {
   const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
   const initialName = [telegramUser?.first_name, telegramUser?.last_name].filter(Boolean).join(' ')
-  const [requests, setRequests] = useState<PermissionRequest[]>(() => import.meta.env.DEV ? readRequests() : [])
-  const [lyricsBoxes, setLyricsBoxes] = useState<LyricsBox[]>(readLyricsBoxes)
+  const [requests, setRequests] = useState<PermissionRequest[]>(() => readRequests())
+  const [lyricsBoxes, setLyricsBoxes] = useState<LyricsBox[]>([])
+  const [lyricsLoading, setLyricsLoading] = useState(false)
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'am' ? 'am' : 'en')
   const [view, setView] = useState<AppView>('requests')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -199,10 +274,26 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
+  const [subscribers, setSubscribers] = useState<SubscriberUser[]>([])
+  const [notificationHistory, setNotificationHistory] = useState<NotificationHistoryItem[]>([])
+  const [totalSubscribers, setTotalSubscribers] = useState(0)
+  const [notifyLoading, setNotifyLoading] = useState(false)
+  const [notifySending, setNotifySending] = useState(false)
+  const [notifyTarget, setNotifyTarget] = useState<'all' | string>('all')
+  const [notifyTitle, setNotifyTitle] = useState('')
+  const [notifyMessage, setNotifyMessage] = useState('')
 
   useEffect(() => {
     window.Telegram?.WebApp?.ready()
     window.Telegram?.WebApp?.expand()
+
+    if (window.Telegram?.WebApp?.initData && !sessionStorage.getItem('welcome_sent')) {
+      sessionStorage.setItem('welcome_sent', 'true')
+      fetch('/api/welcome', {
+        method: 'POST',
+        headers: telegramHeaders(),
+      }).catch(() => {})
+    }
   }, [])
 
   useEffect(() => {
@@ -215,22 +306,26 @@ function App() {
       })
       .then((result) => {
         if (!active) return
-        setRequests(result.requests)
         setRequestsReady(true)
         setRequestError('')
         if (result.role === 'admin') {
+          setRequests(result.requests)
           setAdminAuthenticated(true)
           setView('admin')
+        } else {
+          setRequests((current) => {
+            const serverIds = new Set(result.requests.map((r: PermissionRequest) => r.id))
+            const localOnly = current.filter((r) => !serverIds.has(r.id))
+            const merged = [...result.requests, ...localOnly]
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)) } catch {}
+            return merged
+          })
         }
       })
       .catch((error: unknown) => {
         if (active) {
           setRequestsReady(false)
           setRequestError(error instanceof Error ? error.message : 'Could not load requests.')
-        }
-        if (active && !import.meta.env.DEV) {
-          setRequests([])
-          setToast(t(language, error instanceof Error ? error.message : 'The request service is temporarily unavailable.'))
         }
       })
     return () => { active = false }
@@ -259,7 +354,17 @@ function App() {
         if (!response.ok) return
         const result = await response.json() as { role: 'admin' | 'user'; requests: PermissionRequest[] }
         if (!controller.signal.aborted && (result.role === 'admin') === adminAuthenticated) {
-          setRequests(result.requests)
+          if (adminAuthenticated) {
+            setRequests(result.requests)
+          } else {
+            setRequests((current) => {
+              const serverIds = new Set(result.requests.map((r: PermissionRequest) => r.id))
+              const localOnly = current.filter((r) => !serverIds.has(r.id))
+              const merged = [...result.requests, ...localOnly]
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)) } catch {}
+              return merged
+            })
+          }
         }
       } catch {
         // Keep the last loaded requests during temporary outages; retry on the next refresh.
@@ -286,8 +391,18 @@ function App() {
   }, [language])
 
   useEffect(() => {
-    localStorage.setItem(LYRICS_STORAGE_KEY, JSON.stringify(lyricsBoxes))
-  }, [lyricsBoxes])
+    let active = true
+    setLyricsLoading(true)
+    fetch('/api/lyrics')
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Could not load lyrics.')
+        const result = await res.json() as { lyrics: LyricsBox[] }
+        if (active) setLyricsBoxes(result.lyrics)
+      })
+      .catch(() => { /* keep empty list */ })
+      .finally(() => { if (active) setLyricsLoading(false) })
+    return () => { active = false }
+  }, [])
 
   const todayLabel = new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', { weekday: 'short', day: 'numeric', month: 'short' }).format(today)
 
@@ -306,6 +421,15 @@ function App() {
     return matchesSearch && (!dateFilter || request.date === dateFilter)
   })
 
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+  const userVisibleRequests = requests.filter((request) => {
+    if (!request.submittedAt) return true
+    const submittedTime = new Date(request.submittedAt).getTime()
+    if (isNaN(submittedTime)) return true
+    const age = Date.now() - submittedTime
+    return age <= ONE_WEEK_MS || request.status === 'pending' || request.date >= localDate(0)
+  })
+
   function openAdmin() {
     if (adminAuthenticated) {
       setView('admin')
@@ -315,16 +439,126 @@ function App() {
     setShowAdminLogin(true)
   }
 
+  async function loadNotifierData() {
+    setNotifyLoading(true)
+    try {
+      const res = await fetch('/api/admin/notify')
+      if (res.ok) {
+        const data = await res.json()
+        setSubscribers(data.users || [])
+        setNotificationHistory(data.history || [])
+        setTotalSubscribers(data.totalSubscribers || 0)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setNotifyLoading(false)
+    }
+  }
+
+  function openNotifier() {
+    if (adminAuthenticated) {
+      setView('notifier')
+      loadNotifierData()
+      return
+    }
+    setLoginError('')
+    setShowAdminLogin(true)
+  }
+
+  async function handleSendNotification(e: FormEvent) {
+    e.preventDefault()
+    if (!notifyMessage.trim()) return
+
+    setNotifySending(true)
+    try {
+      const targetUser = subscribers.find((s) => s.telegramId === notifyTarget)
+      const targetName = notifyTarget === 'all'
+        ? 'All bot members'
+        : [targetUser?.firstName, targetUser?.lastName].filter(Boolean).join(' ') || targetUser?.username || notifyTarget
+
+      const res = await fetch('/api/admin/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: notifyTarget,
+          targetName,
+          title: notifyTitle.trim() || undefined,
+          message: notifyMessage.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send notification.')
+
+      setToast(
+        language === 'am'
+          ? `መልእክቱ ለ ${data.sentCount} ሰው በተሳካ ሁኔታ ተልኳል!`
+          : `Notification delivered to ${data.sentCount} recipient(s)!`
+      )
+      setNotifyTitle('')
+      setNotifyMessage('')
+      loadNotifierData()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send'
+      setToast(t(language, msg))
+    } finally {
+      setNotifySending(false)
+    }
+  }
+
   function updateLyricsBox(id: string, field: 'title' | 'lyrics', value: string) {
     setLyricsBoxes((current) => current.map((box) => box.id === id ? { ...box, [field]: value } : box))
   }
 
-  function addLyricsBox() {
-    setLyricsBoxes((current) => [...current, { id: crypto.randomUUID(), title: '', lyrics: '' }])
+  async function saveLyricsBox(id: string) {
+    const box = lyricsBoxes.find((b) => b.id === id)
+    if (!box) return
+    try {
+      const response = await fetch('/api/lyrics', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, title: box.title, lyrics: box.lyrics }),
+      })
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Could not save lyrics.')
+      }
+      setToast(t(language, 'Lyrics saved.'))
+    } catch (error) {
+      setToast(t(language, error instanceof Error ? error.message : 'Could not save lyrics.'))
+    }
   }
 
-  function removeLyricsBox(id: string) {
-    setLyricsBoxes((current) => current.filter((box) => box.id !== id))
+  async function addLyricsBox() {
+    try {
+      const response = await fetch('/api/lyrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Untitled', lyrics: '' }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Could not add lyrics.')
+      setLyricsBoxes((current) => [...current, result.box])
+    } catch (error) {
+      setToast(t(language, error instanceof Error ? error.message : 'Could not add lyrics.'))
+    }
+  }
+
+  async function removeLyricsBox(id: string) {
+    try {
+      const response = await fetch('/api/lyrics', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Could not remove lyrics.')
+      }
+      setLyricsBoxes((current) => current.filter((box) => box.id !== id))
+    } catch (error) {
+      setToast(t(language, error instanceof Error ? error.message : 'Could not remove lyrics.'))
+    }
   }
 
   async function signInAdmin(event: FormEvent<HTMLFormElement>) {
@@ -397,7 +631,11 @@ function App() {
       } else {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Could not submit the request.')
-        setRequests((current) => [result.request, ...current])
+        setRequests((current) => {
+          const updated = [result.request, ...current.filter((r) => r.id !== result.request.id)]
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)) } catch {}
+          return updated
+        })
       }
       setReason('')
       setToast(t(language, 'Your request has been sent to the admin.'))
@@ -434,7 +672,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <a className="brand" href="#home" aria-label="Birhane Hiwot home">
-          <span className="brand-mark">B</span>
+          <img className="brand-logo" src="/logo.jpg" alt="Birhane Hiwot logo" />
           <span className="brand-name"><strong>Birhane Hiwot</strong><span lang="am">ብርሃነ ህይወት</span></span>
         </a>
         <div className="sidebar-label">{t(language, 'WORKSPACE')}</div>
@@ -445,6 +683,10 @@ function App() {
           <button className={view === 'admin' ? 'nav-item active' : 'nav-item'} onClick={openAdmin}>
             <ShieldCheck size={18} strokeWidth={1.8} /> {t(language, 'Admin review')}
             {pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}
+          </button>
+          <button className={view === 'notifier' ? 'nav-item active' : 'nav-item'} onClick={openNotifier}>
+            <Bell size={18} strokeWidth={1.8} /> {t(language, 'Notifier')}
+            {totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}
           </button>
           <button className={view === 'mezmur' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mezmur')}>
             <Music2 size={18} strokeWidth={1.8} /> {t(language, 'Mezmur')}
@@ -463,8 +705,8 @@ function App() {
       <main className="main-area">
         {requestError && <p className="login-error" role="alert">{t(language, requestError)}</p>}
         <header className="topbar">
-          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'mezmur' ? 'MEZMUR' : 'PERMISSION DESK')}</strong></div>
-          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<div className="topbar-avatar">{initialName ? initialName.charAt(0).toUpperCase() : 'B'}</div><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button></nav>}</div></div>
+          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'notifier' ? 'NOTIFIER PANEL' : view === 'mezmur' ? 'MEZMUR' : 'PERMISSION DESK')}</strong></div>
+          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<img className="topbar-logo" src="/logo.jpg" alt="Birhane Hiwot" /><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button><button type="button" role="menuitem" className={view === 'notifier' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openNotifier(); setMenuOpen(false) }}><Bell size={17} />{t(language, 'Notifier')}{totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button></nav>}</div></div>
         </header>
 
         {view === 'requests' ? (
@@ -499,8 +741,36 @@ function App() {
               </section>
 
               <aside className="activity-panel">
-                <div className="activity-title"><div><div className="eyebrow">{t(language, 'YOUR ACTIVITY')}</div><h2>{t(language, 'Recent requests')}</h2></div><span className="activity-count">{requests.length.toString().padStart(2, '0')}</span></div>
-                <div className="activity-list">{requests.slice(0, 4).map((request) => <article className="activity-item" key={request.id}><span className={`activity-marker marker-${request.status}`} /><div className="activity-details"><div className="activity-type">{t(language, request.type)}</div><div className="activity-meta">{formatDate(request.date, language)} <span>·</span> {request.username}</div><StatusBadge status={request.status} language={language} /></div><ArrowRight size={15} className="activity-arrow" /></article>)}</div>
+                <div className="activity-title">
+                  <div>
+                    <div className="eyebrow">{t(language, 'YOUR ACTIVITY')}</div>
+                    <h2>{t(language, 'Recent requests')}</h2>
+                  </div>
+                  <span className="activity-count">{(userVisibleRequests.length > 0 ? userVisibleRequests : requests).length.toString().padStart(2, '0')}</span>
+                </div>
+                <div className="activity-retention-note">
+                  <Clock3 size={13} /> {t(language, 'Requests remain visible for at least 7 days.')}
+                </div>
+                <div className="activity-list">
+                  {(userVisibleRequests.length > 0 ? userVisibleRequests : requests).map((request) => (
+                    <article className="activity-item" key={request.id}>
+                      <span className={`activity-marker marker-${request.status}`} />
+                      <div className="activity-details">
+                        <div className="activity-type">{t(language, request.type)}</div>
+                        <div className="activity-meta">
+                          {formatDate(request.date, language)} <span>·</span> {request.username}
+                        </div>
+                        {request.submittedAt && (
+                          <div className="activity-submitted-time">
+                            {t(language, 'Submitted on')}: {formatDate(request.submittedAt.slice(0, 10), language)}
+                          </div>
+                        )}
+                        <StatusBadge status={request.status} language={language} />
+                      </div>
+                      <ArrowRight size={15} className="activity-arrow" />
+                    </article>
+                  ))}
+                </div>
                 {requests.length === 0 && <p className="empty-copy">{t(language, 'Your requests will show up here.')}</p>}
                 <button type="button" className="text-link" onClick={openAdmin}>{t(language, 'Open request log')} <ArrowRight size={15} /></button>
                 <div className="note-panel"><div className="note-mark">“</div><p>{t(language, 'Plans change. A little notice helps everyone stay in sync.')}</p><span>{t(language, 'PEOPLE TEAM')}</span></div>
@@ -523,19 +793,279 @@ function App() {
             </section>
             <div className="admin-footnote"><ShieldCheck size={16} /> {t(language, 'Request statuses refresh automatically every 10 seconds.')}</div>
           </div>
+        ) : view === 'notifier' ? (
+          <div className="page-content notifier-content">
+            <section className="page-heading notifier-heading">
+              <div>
+                <div className="eyebrow"><span className="eyebrow-line" /> {t(language, 'PEOPLE OPERATIONS / ADMIN')}</div>
+                <h1>{t(language, 'Telegram notifier')}<span className="heading-period">.</span></h1>
+                <p>{t(language, 'Broadcast announcements and direct notifications to Telegram users.')}</p>
+              </div>
+              <div className="admin-count">
+                <span>{t(language, 'TOTAL SUBSCRIBERS')}</span>
+                <strong>{totalSubscribers.toString().padStart(2, '0')} <small>users</small></strong>
+              </div>
+            </section>
+
+            <section className="notifier-stats">
+              <div>
+                <span>{t(language, 'TOTAL SUBSCRIBERS')}</span>
+                <strong>{totalSubscribers.toString().padStart(2, '0')}</strong>
+              </div>
+              <div>
+                <span>{t(language, 'ACTIVE BOT USERS')}</span>
+                <strong>{subscribers.length.toString().padStart(2, '0')}</strong>
+              </div>
+              <div className="summary-accent">
+                <span>{t(language, 'BOT STATUS')}</span>
+                <strong style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="online-dot" /> {t(language, 'Online & Ready')}
+                </strong>
+              </div>
+            </section>
+
+            <div className="notifier-grid">
+              <section className="composer-card">
+                <div className="eyebrow"><Send size={12} style={{ display: 'inline', marginRight: 4 }} /> {t(language, 'Compose notification')}</div>
+                <h2>{t(language, 'Compose notification')}</h2>
+                <p>{t(language, 'Create and send a notification through the Telegram bot.')}</p>
+
+                <form onSubmit={handleSendNotification}>
+                  <div className="target-segmented">
+                    <button
+                      type="button"
+                      className={`segmented-btn ${notifyTarget === 'all' ? 'active' : ''}`}
+                      onClick={() => setNotifyTarget('all')}
+                    >
+                      <Users size={14} /> {t(language, 'All bot members')}
+                    </button>
+                    <button
+                      type="button"
+                      className={`segmented-btn ${notifyTarget !== 'all' ? 'active' : ''}`}
+                      onClick={() => {
+                        if (subscribers.length > 0 && notifyTarget === 'all') {
+                          setNotifyTarget(subscribers[0].telegramId)
+                        }
+                      }}
+                    >
+                      <Radio size={14} /> {t(language, 'Single user')}
+                    </button>
+                  </div>
+
+                  {notifyTarget !== 'all' && (
+                    <label className="field" style={{ marginBottom: 14 }}>
+                      <span>{t(language, 'Single user')}</span>
+                      <select
+                        value={notifyTarget}
+                        onChange={(e) => setNotifyTarget(e.target.value)}
+                        style={{
+                          height: 38,
+                          padding: '0 10px',
+                          border: '1px solid #d4ded0',
+                          borderRadius: 3,
+                          background: 'white',
+                          color: '#344037',
+                          fontFamily: 'inherit',
+                          fontSize: 12,
+                        }}
+                      >
+                        {subscribers.map((u) => (
+                          <option key={u.telegramId} value={u.telegramId}>
+                            {[u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || u.telegramId}
+                            {u.username ? ` (@${u.username})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+
+                  <div className="template-chips">
+                    <span className="template-chips-label">{t(language, 'Quick templates')}:</span>
+                    <button
+                      type="button"
+                      className="template-chip"
+                      onClick={() => {
+                        setNotifyTitle(language === 'am' ? 'አጠቃላይ ማስታወቂያ' : 'General Announcement')
+                        setNotifyMessage(
+                          language === 'am'
+                            ? 'ውድ የሰንበት ት/ቤት አባላት፣ የፊታችን እሁድ ልዩ የመዝሙር አገልግሎት ስላለ ሁላችንም በሰዓቱ እንድንገኝ በትህትና እናሳስባለን።'
+                            : 'Dear Sunday School members, please be reminded that we have a special rehearsal this weekend. Please be on time!'
+                        )
+                      }}
+                    >
+                      📢 {t(language, 'General announcement')}
+                    </button>
+                    <button
+                      type="button"
+                      className="template-chip"
+                      onClick={() => {
+                        setNotifyTitle(language === 'am' ? 'የመዝሙር ልምምድ ጥሪ' : 'Rehearsal Reminder')
+                        setNotifyMessage(
+                          language === 'am'
+                            ? 'ሰላም ቅዱሳን፣ ዛሬ ከሰዓት 11:30 ላይ የመዝሙር ልምምድ ስላለ በሰዓቱ ተገኝተን እንድንለማመድ እናሳስባለን።'
+                            : 'Reminder: Choir rehearsal starts today at 5:30 PM. See you all there!'
+                        )
+                      }}
+                    >
+                      ⏰ {t(language, 'Rehearsal reminder')}
+                    </button>
+                    <button
+                      type="button"
+                      className="template-chip"
+                      onClick={() => {
+                        setNotifyTitle(language === 'am' ? 'የአገልግሎት ጥሪ' : 'Service Notice')
+                        setNotifyMessage(
+                          language === 'am'
+                            ? 'የነገው የሰንበት ት/ቤት መርሐግብር በጠዋቱ 12:30 ይጀምራል። ሁላችንም በጸሎት ተዘጋጅተን እንድንገኝ እናሳስባለን።'
+                            : 'Tomorrow morning program begins at 6:30 AM. Let us all prepare in prayer.'
+                        )
+                      }}
+                    >
+                      ⛪ {t(language, 'Service notice')}
+                    </button>
+                  </div>
+
+                  <label className="field">
+                    <span>{t(language, 'Notification title (optional)')}</span>
+                    <input
+                      value={notifyTitle}
+                      onChange={(e) => setNotifyTitle(e.target.value)}
+                      placeholder={language === 'am' ? 'ለምሳሌ፡ የሰንበት ት/ቤት ማስታወቂያ' : 'e.g. Sunday School Announcement'}
+                      maxLength={120}
+                    />
+                  </label>
+
+                  <label className="field" style={{ marginTop: 12 }}>
+                    <span>{t(language, 'Write your message...')}</span>
+                    <textarea
+                      value={notifyMessage}
+                      onChange={(e) => setNotifyMessage(e.target.value)}
+                      placeholder={language === 'am' ? 'የመልእክቱን ዝርዝር እዚህ ይጻፉ...' : 'Write your announcement or notice here...'}
+                      rows={5}
+                      required
+                      maxLength={4000}
+                    />
+                  </label>
+
+                  <div className="telegram-preview">
+                    <div className="preview-badge">{t(language, 'Live Telegram preview')}</div>
+                    <div className="telegram-bubble">
+                      <div className="tg-bot-header">
+                        <img className="tg-bot-avatar" src="/logo.jpg" alt="Bot avatar" />
+                        <span className="tg-bot-name">ብርሃነ ሕይወት ቦት</span>
+                        <span className="tg-bot-tag">BOT</span>
+                      </div>
+                      {notifyTitle.trim() && (
+                        <div className="tg-preview-title">📢 {notifyTitle.trim()}</div>
+                      )}
+                      <div className="tg-preview-body">
+                        {notifyMessage.trim() || (language === 'am' ? 'የመልእክቱ ቅድመ-እይታ እዚህ ይታያል...' : 'Message preview will appear here...')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="submit-button"
+                    style={{ width: '100%', marginTop: 10 }}
+                    disabled={notifySending || !notifyMessage.trim()}
+                  >
+                    <Send size={15} />
+                    {notifySending ? t(language, 'Sending...') : t(language, 'Send notification')}
+                  </button>
+                </form>
+              </section>
+
+              <div className="subscribers-panel">
+                <section className="subscribers-card">
+                  <div className="eyebrow"><Users size={12} style={{ display: 'inline', marginRight: 4 }} /> {t(language, 'Subscribers & visitors')}</div>
+                  <h2>{t(language, 'Subscribers & visitors')} <span>({subscribers.length})</span></h2>
+                  <p>{t(language, 'People who opened the Mini App')}</p>
+
+                  <div className="subscribers-list">
+                    {subscribers.map((u) => {
+                      const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || 'Member'
+                      return (
+                        <div className="subscriber-row" key={u.telegramId}>
+                          <div className="subscriber-info">
+                            <span className="requester-avatar">
+                              {fullName.charAt(0).toUpperCase()}
+                            </span>
+                            <div className="subscriber-details">
+                              <strong>{fullName}</strong>
+                              <span>{u.username ? `@${u.username}` : `ID: ${u.telegramId}`} • {u.visitCount} visits</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="subscriber-action-btn"
+                            onClick={() => {
+                              setNotifyTarget(u.telegramId)
+                              setNotifyTitle(language === 'am' ? `ሰላም ${u.firstName || fullName}` : `Hello ${u.firstName || fullName}`)
+                            }}
+                          >
+                            {t(language, 'Direct message')}
+                          </button>
+                        </div>
+                      )
+                    })}
+                    {subscribers.length === 0 && !notifyLoading && (
+                      <p className="empty-copy">{t(language, 'No subscribers found.')}</p>
+                    )}
+                  </div>
+                </section>
+
+                <section className="history-card">
+                  <div className="eyebrow">{t(language, 'Recent broadcasts')}</div>
+                  <h2>{t(language, 'Recent broadcasts')}</h2>
+                  <div className="history-list">
+                    {notificationHistory.map((h, i) => (
+                      <div className="history-item" key={h.id || i}>
+                        <div className="history-header">
+                          <span className="history-title">{h.title || 'Broadcast'}</span>
+                          <span className="history-time">{h.sentAt ? formatDate(h.sentAt.slice(0, 10), language) : ''}</span>
+                        </div>
+                        <div className="history-snippet">{h.message}</div>
+                        <div className="history-stats">
+                          ✓ Sent to {h.sentCount} {h.failedCount > 0 ? `(${h.failedCount} failed)` : ''}
+                        </div>
+                      </div>
+                    ))}
+                    {notificationHistory.length === 0 && (
+                      <p className="empty-copy">{t(language, 'No broadcasts sent yet.')}</p>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="page-content mezmur-content">
             <section className="page-heading mezmur-heading">
               <div><div className="eyebrow"><span className="eyebrow-line" /> BIRHANE HIWOT</div><h1>{t(language, 'Mezmur')}<span className="heading-period">.</span></h1><p>{t(language, 'Keep song lyrics together in one place.')}</p></div>
-              <button type="button" className="submit-button add-lyrics-button" onClick={addLyricsBox}><Plus size={16} /> {t(language, 'Add lyrics box')}</button>
+              {adminAuthenticated && <button type="button" className="submit-button add-lyrics-button" onClick={addLyricsBox}><Plus size={16} /> {t(language, 'Add lyrics box')}</button>}
             </section>
             <section className="lyrics-grid" aria-label={t(language, 'Mezmur')}>
+              {lyricsLoading && lyricsBoxes.length === 0 && <p className="empty-copy">{language === 'am' ? 'በመጫን ላይ…' : 'Loading lyrics…'}</p>}
               {lyricsBoxes.map((box, index) => <article className="lyrics-box" key={box.id}>
-                <div className="lyrics-box-heading"><span><Music2 size={16} /> {t(language, 'Lyrics')} {String(index + 1).padStart(2, '0')}</span><button type="button" className="remove-lyrics-button" onClick={() => removeLyricsBox(box.id)} aria-label={`${t(language, 'Remove lyrics box')} ${index + 1}`} title={t(language, 'Remove lyrics box')}><X size={16} /></button></div>
-                <label className="field"><span>{t(language, 'Song title')}</span><input value={box.title} onChange={(event) => updateLyricsBox(box.id, 'title', event.target.value)} placeholder={t(language, 'Song title')} /></label>
-                <label className="field lyrics-text-field"><span>{t(language, 'Lyrics')}</span><textarea value={box.lyrics} onChange={(event) => updateLyricsBox(box.id, 'lyrics', event.target.value)} placeholder={t(language, 'Write or paste the lyrics here...')} rows={8} /></label>
+                <div className="lyrics-box-heading"><span><Music2 size={16} /> {t(language, 'Lyrics')} {String(index + 1).padStart(2, '0')}</span>{adminAuthenticated && <button type="button" className="remove-lyrics-button" onClick={() => removeLyricsBox(box.id)} aria-label={`${t(language, 'Remove lyrics box')} ${index + 1}`} title={t(language, 'Remove lyrics box')}><X size={16} /></button>}</div>
+                {adminAuthenticated ? (
+                  <>
+                    <label className="field"><span>{t(language, 'Song title')}</span><input value={box.title} onChange={(event) => updateLyricsBox(box.id, 'title', event.target.value)} onBlur={() => saveLyricsBox(box.id)} placeholder={t(language, 'Song title')} /></label>
+                    <label className="field lyrics-text-field"><span>{t(language, 'Lyrics')}</span><textarea value={box.lyrics} onChange={(event) => updateLyricsBox(box.id, 'lyrics', event.target.value)} onBlur={() => saveLyricsBox(box.id)} placeholder={t(language, 'Write or paste the lyrics here...')} rows={8} /></label>
+                  </>
+                ) : (
+                  <>
+                    <div className="lyrics-readonly-title">{box.title || t(language, 'Untitled')}</div>
+                    <div className="lyrics-readonly-text">{box.lyrics || t(language, 'No lyrics yet.')}</div>
+                  </>
+                )}
               </article>)}
-              {lyricsBoxes.length === 0 && <button type="button" className="empty-lyrics-button" onClick={addLyricsBox}><Plus size={17} /> {t(language, 'Add lyrics box')}</button>}
+              {!lyricsLoading && lyricsBoxes.length === 0 && (
+                adminAuthenticated
+                  ? <button type="button" className="empty-lyrics-button" onClick={addLyricsBox}><Plus size={17} /> {t(language, 'Add lyrics box')}</button>
+                  : <p className="empty-copy">{t(language, 'No lyrics have been added yet.')}</p>
+              )}
             </section>
           </div>
         )}

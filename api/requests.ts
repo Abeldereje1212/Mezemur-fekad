@@ -15,17 +15,35 @@ export default async function handler(request: VercelRequest, response: VercelRe
       }
 
       const telegramUser = getTelegramUser(request)
-      if (!telegramUser) {
-        // Browser users without Telegram auth get an empty list — they can still submit requests
+      const clientIdHeader = request.headers['x-client-id']
+      const clientId = Array.isArray(clientIdHeader) ? clientIdHeader[0] : clientIdHeader
+
+      const conditions: Array<Record<string, unknown>> = []
+      if (telegramUser?.id) {
+        conditions.push({ telegramId: telegramUser.id })
+      }
+      if (clientId && typeof clientId === 'string' && clientId.trim().length > 0) {
+        conditions.push({ telegramId: clientId.trim() })
+        conditions.push({ clientId: clientId.trim() })
+      }
+
+      if (conditions.length === 0) {
         return response.status(200).json({ role: 'user', requests: [] })
       }
+
       const collection = await permissionRequests()
-      const records = await collection.find({ telegramId: telegramUser.id }).sort({ submittedAt: -1 }).limit(100).toArray()
+      const records = await collection
+        .find({ $or: conditions })
+        .sort({ submittedAt: -1 })
+        .limit(100)
+        .toArray()
       return response.status(200).json({ role: 'user', requests: records.map(toPermissionRequest) })
     }
 
     if (request.method === 'POST') {
       const telegramUser = getTelegramUser(request)
+      const clientIdHeader = request.headers['x-client-id']
+      const clientId = Array.isArray(clientIdHeader) ? clientIdHeader[0] : clientIdHeader
 
       const { name, phone, type, date, reason, username: bodyUsername } = request.body ?? {}
       if (typeof name !== 'string' || name.trim().length < 2 || name.length > 120 || typeof phone !== 'string' || phone.trim().length < 5 || phone.length > 40 || typeof type !== 'string' || !permissionTypes.has(type) || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof reason !== 'string' || reason.trim().length < 2 || reason.length > 2000) {
@@ -41,7 +59,9 @@ export default async function handler(request: VercelRequest, response: VercelRe
         resolvedUsername = typeof bodyUsername === 'string' && bodyUsername.trim().length > 0
           ? (bodyUsername.trim().startsWith('@') ? bodyUsername.trim() : `@${bodyUsername.trim()}`)
           : 'Browser user'
-        resolvedTelegramId = `browser-${Date.now()}`
+        resolvedTelegramId = clientId && typeof clientId === 'string' && clientId.trim().length > 0
+          ? clientId.trim()
+          : `browser-${Date.now()}`
       }
 
       const record: PermissionRecord = {
@@ -54,6 +74,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
         status: 'pending',
         submittedAt: new Date().toISOString(),
         telegramId: resolvedTelegramId,
+        ...(clientId && typeof clientId === 'string' ? { clientId: clientId.trim() } : {}),
       }
       const collection = await permissionRequests()
       const result = await collection.insertOne(record)
@@ -74,6 +95,33 @@ export default async function handler(request: VercelRequest, response: VercelRe
         { returnDocument: 'after' },
       )
       if (!result) return response.status(404).json({ error: 'Request was not found or was already reviewed.' })
+
+      if (result.telegramId && !result.telegramId.startsWith('browser-')) {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN
+        if (botToken) {
+          const statusText = status === 'approved' ? '✅ ተፈቅዷል (Approved)' : '❌ አልተፈቀደም (Rejected)'
+          const notificationMsg = [
+            `🔔 <b>የፈቃድ ጥያቄ ውሳኔ / Request Decision</b>`,
+            ``,
+            `ሰላም <b>${result.name}</b>፣`,
+            `ለ <b>${result.date}</b> ያቀረቡት የ<b>${result.type}</b> ፈቃድ ጥያቄ፡`,
+            `ውሳኔ፡ <b>${statusText}</b>`,
+            ``,
+            `ዝርዝር መረጃዎችን በመተግበሪያው ውስጥ ማየት ይችላሉ።`,
+          ].join('\n')
+
+          fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: result.telegramId,
+              text: notificationMsg,
+              parse_mode: 'HTML',
+            }),
+          }).catch((err) => console.error('Telegram notification error:', err))
+        }
+      }
+
       return response.status(200).json({ request: toPermissionRequest(result) })
     }
 
