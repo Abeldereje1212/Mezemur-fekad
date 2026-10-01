@@ -1,7 +1,10 @@
 // Songs from "መዝሙር ጥራዝ" (ብርሃነ ሕይወት ሰ/ት ት/ቤት, ሐምሌ 2016).
-// Order matters: the seed script inserts them in this order within each category.
+// Admins approve these from the Mezmur page; approved songs are inserted in this order.
+import type { MezmurCategory } from './mongo.js'
 
-const michael = [
+type SongList = [title: string, lyrics: string][]
+
+const michael: SongList = [
   ['ረዳኤ ምንዱባን', `ረዳኤ ምንዱባን ሚካኤል በከመ ታለም እምዘልፈ
 ለረዲኦትየ ንኣ ሰፊሀከ ክንፈ(×2)
 
@@ -227,7 +230,7 @@ const michael = [
 የሚካኤል አምላክ ይመስገን እግዚአብሔር /2/`],
 ]
 
-const zewetir = [
+const zewetir: SongList = [
   ['ቀዳሚሁ ቃል', `ቀዳሚሁ ቃል ውእቱ ቃል
 ቃል ስጋ ኮነ ይቤ ዮሐንስ(2)`],
 
@@ -385,7 +388,7 @@ const zewetir = [
 አንድ ሆነን ዛሬ እናገልግል አንድ ሆነን ዛሬ እንሥራ`],
 ]
 
-const meskel = [
+const meskel: SongList = [
   ['ይትቀደስ ስምከ', `ይትቀደስ ስምከ በኃይለ መስቀልከ በዕፀ መስቀልከ ክቡር ዘዐእበይኮ ለስምከ
 ስብሐት ለከ ለባህቲትከ ልዑል (2)
 
@@ -499,7 +502,7 @@ const meskel = [
 በኃይለ መስቀሉ(3) ይትቀበልነ`],
 ]
 
-const lidet = [
+const lidet: SongList = [
   ['ወወለደት', `ወወለደት ወልደ ዘበኩራ /2/
 መንጦላዕተ ደመና ሰወራ /2/
 
@@ -652,7 +655,7 @@ const lidet = [
 አምላካችን(2*) የብርሃናት ብርሃን የጸሐይ ጸሐይ ተወለደ አምላክ አዶናይ`],
 ]
 
-const timket = [
+const timket: SongList = [
   ['ውስተ ማኅፀነ', `ውስተ ማኅፀነ ድንግል ኀደረ ማኅፀነ ድንግል /2/
 ሰማይ ወምድር ዘኢያገምሮ ሰማይ ወምድር በማይ ተጠምቀ /2/
 
@@ -834,14 +837,21 @@ const timket = [
 እንደምን ተመረጥሽ ዮርዳኖስ ከሁሉ`],
 ]
 
-const toSongs = (category, list) => list.map(([title, lyrics], index) => ({
+export interface SeedSong {
+  seedKey: string
+  category: MezmurCategory
+  title: string
+  lyrics: string
+}
+
+const toSongs = (category: MezmurCategory, list: SongList): SeedSong[] => list.map(([title, lyrics], index) => ({
   seedKey: `${category}-${String(index + 1).padStart(2, '0')}`,
   category,
   title,
   lyrics,
 }))
 
-export const mezmurSongs = [
+export const mezmurSongs: SeedSong[] = [
   ...toSongs('michael', michael),
   ...toSongs('zewetir', zewetir),
   ...toSongs('meskel', meskel),

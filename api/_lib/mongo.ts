@@ -59,6 +59,24 @@ export async function lyricsCollection(): Promise<Collection<LyricsRecord>> {
   return collection
 }
 
+// Songbook seed songs an admin rejected (or deleted after approving), so they stop showing as pending.
+export interface SeedRejectionRecord extends Document {
+  seedKey: string
+  rejectedAt: string
+}
+
+export async function seedRejectionsCollection(): Promise<Collection<SeedRejectionRecord>> {
+  const uri = process.env.MONGODB_URI
+  if (!uri) throw new Error('MONGODB_URI is not configured')
+
+  globalThis.permissionMongoClient ??= new MongoClient(uri).connect()
+  const client = await globalThis.permissionMongoClient
+  const db = process.env.MONGODB_DB || 'birhane_hiwot'
+  const collection = client.db(db).collection<SeedRejectionRecord>('lyrics_seed_rejections')
+  await collection.createIndex({ seedKey: 1 }, { unique: true })
+  return collection
+}
+
 export function toLyricsBox(document: LyricsRecord & { _id: { toString(): string } }) {
   const { _id, ...record } = document
   return { ...record, id: _id.toString() }

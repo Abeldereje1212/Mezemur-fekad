@@ -71,6 +71,13 @@ interface LyricsBox {
   category?: MezmurCategory
 }
 
+interface SeedSong {
+  seedKey: string
+  category: MezmurCategory
+  title: string
+  lyrics: string
+}
+
 const mezmurCategories: { id: MezmurCategory; label: string }[] = [
   { id: 'michael', label: 'St. Michael' },
   { id: 'zewetir', label: 'Everyday' },
@@ -154,6 +161,13 @@ const translations: Record<Language, Record<string, string>> = {
     'Category': 'ምድብ', 'No category': 'ምድብ የለም', 'Mezmur categories': 'የመዝሙር ምድቦች',
     'No lyrics in this category yet.': 'በዚህ ምድብ ገና ግጥም የለም።',
     'Please provide a valid category.': 'እባክዎ ትክክለኛ ምድብ ይምረጡ።',
+    'Songbook approval': 'የመዝሙር ጥራዝ ማጽደቂያ',
+    'They are hidden from everyone until you approve them.': 'እስኪያጸድቁ ድረስ ለማንም አይታዩም።',
+    'Review': 'ገምግም', 'Hide': 'ደብቅ', 'Select all': 'ሁሉንም ምረጥ', 'Select none': 'ምርጫ አጽዳ',
+    'Reject selected': 'የተመረጡትን ውድቅ አድርግ', 'Approve & publish selected': 'የተመረጡትን አጽድቅና አትም',
+    'No songs waiting in this category.': 'በዚህ ምድብ የሚጠብቅ መዝሙር የለም።',
+    'Could not update songbook songs.': 'የመዝሙር ጥራዝ መዝሙሮችን ማዘመን አልተቻለም።',
+    'Please select at least one song.': 'እባክዎ ቢያንስ አንድ መዝሙር ይምረጡ።',
     'Notifier': 'የማሳወቂያ ክፍል',
     'NOTIFIER PANEL': 'የማሳወቂያ ክፍል',
     'Telegram notifier': 'የቴሌግራም መልእክት ማስተላለፊያ',
@@ -251,6 +265,12 @@ function formatDate(value: string, language: Language) {
   return new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T00:00:00`))
 }
 
+function formatDateTime(value: string, language: Language) {
+  const date = new Date(value)
+  if (!value || Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date)
+}
+
 function StatusBadge({ status, language }: { status: RequestStatus; language: Language }) {
   return <span className={`status-badge status-${status}`}><span />{t(language, statusKeys[status])}</span>
 }
@@ -272,6 +292,11 @@ function App() {
   const [lyricsLoading, setLyricsLoading] = useState(false)
   const [mezmurFilter, setMezmurFilter] = useState<MezmurFilter>('all')
   const visibleLyrics = mezmurFilter === 'all' ? lyricsBoxes : lyricsBoxes.filter((box) => box.category === mezmurFilter)
+  const [pendingSeeds, setPendingSeeds] = useState<SeedSong[]>([])
+  const [selectedSeeds, setSelectedSeeds] = useState<Set<string>>(() => new Set())
+  const [seedReviewOpen, setSeedReviewOpen] = useState(false)
+  const [seedBusy, setSeedBusy] = useState(false)
+  const visibleSeeds = mezmurFilter === 'all' ? pendingSeeds : pendingSeeds.filter((song) => song.category === mezmurFilter)
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'am' ? 'am' : 'en')
   const [view, setView] = useState<AppView>('requests')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -422,6 +447,21 @@ function App() {
     return () => { active = false }
   }, [])
 
+  useEffect(() => {
+    if (!adminAuthenticated || view !== 'mezmur') return
+    let active = true
+    fetch('/api/lyrics?seed=pending')
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Could not load songbook songs.')
+        const result = await res.json() as { pending: SeedSong[] }
+        if (!active) return
+        setPendingSeeds(result.pending)
+        setSelectedSeeds(new Set(result.pending.map((song) => song.seedKey)))
+      })
+      .catch(() => { /* banner simply stays hidden */ })
+    return () => { active = false }
+  }, [adminAuthenticated, view])
+
   const todayLabel = new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', { weekday: 'short', day: 'numeric', month: 'short' }).format(today)
 
   useEffect(() => {
@@ -526,6 +566,51 @@ function App() {
 
   function updateLyricsBox(id: string, field: 'title' | 'lyrics', value: string) {
     setLyricsBoxes((current) => current.map((box) => box.id === id ? { ...box, [field]: value } : box))
+  }
+
+  function toggleSeed(seedKey: string) {
+    setSelectedSeeds((current) => {
+      const next = new Set(current)
+      if (next.has(seedKey)) next.delete(seedKey)
+      else next.add(seedKey)
+      return next
+    })
+  }
+
+  function setVisibleSeedsSelected(selected: boolean) {
+    setSelectedSeeds((current) => {
+      const next = new Set(current)
+      for (const song of visibleSeeds) {
+        if (selected) next.add(song.seedKey)
+        else next.delete(song.seedKey)
+      }
+      return next
+    })
+  }
+
+  async function reviewSeeds(action: 'approve-seed' | 'reject-seed') {
+    const seedKeys = visibleSeeds.filter((song) => selectedSeeds.has(song.seedKey)).map((song) => song.seedKey)
+    if (seedKeys.length === 0) return
+    setSeedBusy(true)
+    try {
+      const response = await fetch('/api/lyrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, seedKeys }),
+      })
+      const result = await response.json() as { boxes?: LyricsBox[]; handled?: string[]; error?: string }
+      if (!response.ok) throw new Error(result.error || 'Could not update songbook songs.')
+      const handled = new Set(result.handled ?? [])
+      setPendingSeeds((current) => current.filter((song) => !handled.has(song.seedKey)))
+      if (result.boxes?.length) setLyricsBoxes((current) => [...current, ...result.boxes!])
+      setToast(language === 'am'
+        ? `${handled.size} መዝሙሮች ${action === 'approve-seed' ? 'ጸድቀው ታትመዋል' : 'ውድቅ ተደርገዋል'}።`
+        : `${handled.size} songs ${action === 'approve-seed' ? 'approved and published' : 'rejected'}.`)
+    } catch (error) {
+      setToast(t(language, error instanceof Error ? error.message : 'Could not update songbook songs.'))
+    } finally {
+      setSeedBusy(false)
+    }
   }
 
   function updateLyricsCategory(id: string, category: MezmurCategory | undefined) {
@@ -787,7 +872,7 @@ function App() {
                         </div>
                         {request.submittedAt && (
                           <div className="activity-submitted-time">
-                            {t(language, 'Submitted on')}: {formatDate(request.submittedAt.slice(0, 10), language)}
+                            {t(language, 'Submitted on')}: {formatDateTime(request.submittedAt, language)}
                           </div>
                         )}
                         <StatusBadge status={request.status} language={language} />
@@ -812,7 +897,7 @@ function App() {
             <section className="log-panel">
               <div className="log-heading"><div><div className="eyebrow">{t(language, 'INBOX')}</div><h2>{t(language, 'All permissions')} <span>{filteredRequests.length}</span></h2></div><button type="button" className="export-button" onClick={() => { setSearch(''); setDateFilter('') }}><X size={15} /> {t(language, 'Clear filters')}</button></div>
               <div className="filters-row"><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t(language, 'Search name or Telegram username')} aria-label={t(language, 'Filter by name or Telegram username')} /></label><label className="date-filter"><CalendarDays size={16} /><input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} aria-label={t(language, 'Filter by date')} /></label><span className="filter-caption">{t(language, 'FILTER REQUESTS')}</span></div>
-              <div className="table-wrap"><table><thead><tr><th>{t(language, 'REQUESTER')}</th><th>{t(language, 'PERMISSION')}</th><th>{t(language, 'DATE NEEDED')}</th><th>{t(language, 'PHONE')}</th><th>{t(language, 'REASON')}</th><th>{t(language, 'STATUS')}</th><th className="action-column">{t(language, 'REVIEW')}</th></tr></thead><tbody>{filteredRequests.map((request) => <tr key={request.id}><td><div className="requester-cell"><span className="requester-avatar">{request.name.charAt(0).toUpperCase()}</span><span><strong>{request.name}</strong><small>{request.username}</small></span></div></td><td><span className="type-tag">{t(language, request.type)}</span></td><td className="date-cell">{formatDate(request.date, language)}</td><td className="phone-cell">{request.phone}</td><td className="reason-cell" title={request.reason}>{request.reason}</td><td><StatusBadge status={request.status} language={language} /></td><td><div className="review-actions">{request.status === 'pending' ? <><button type="button" className="approve-button" onClick={() => updateStatus(request.id, 'approved')} aria-label={`${t(language, 'Approve')} ${request.name}`} title={t(language, 'Approve')}><Check size={16} /></button><button type="button" className="reject-button" onClick={() => updateStatus(request.id, 'rejected')} aria-label={`${t(language, 'Reject')} ${request.name}`} title={t(language, 'Reject')}><X size={16} /></button></> : <span className="reviewed-mark" aria-label={t(language, 'Reviewed')}><Check size={15} /></span>}</div></td></tr>)}</tbody></table>
+              <div className="table-wrap"><table><thead><tr><th>{t(language, 'REQUESTER')}</th><th>{t(language, 'PERMISSION')}</th><th>{t(language, 'DATE NEEDED')}</th><th>{t(language, 'PHONE')}</th><th>{t(language, 'REASON')}</th><th>{t(language, 'STATUS')}</th><th className="action-column">{t(language, 'REVIEW')}</th></tr></thead><tbody>{filteredRequests.map((request) => <tr key={request.id}><td><div className="requester-cell"><span className="requester-avatar">{request.name.charAt(0).toUpperCase()}</span><span><strong>{request.name}</strong><small>{request.username}</small></span></div></td><td><span className="type-tag">{t(language, request.type)}</span></td><td className="date-cell">{formatDate(request.date, language)}{request.submittedAt && <small className="submitted-at">{t(language, 'Submitted on')}: {formatDateTime(request.submittedAt, language)}</small>}</td><td className="phone-cell">{request.phone}</td><td className="reason-cell" title={request.reason}>{request.reason}</td><td><StatusBadge status={request.status} language={language} /></td><td><div className="review-actions">{request.status === 'pending' ? <><button type="button" className="approve-button" onClick={() => updateStatus(request.id, 'approved')} aria-label={`${t(language, 'Approve')} ${request.name}`} title={t(language, 'Approve')}><Check size={16} /></button><button type="button" className="reject-button" onClick={() => updateStatus(request.id, 'rejected')} aria-label={`${t(language, 'Reject')} ${request.name}`} title={t(language, 'Reject')}><X size={16} /></button></> : <span className="reviewed-mark" aria-label={t(language, 'Reviewed')}><Check size={15} /></span>}</div></td></tr>)}</tbody></table>
                 {filteredRequests.length === 0 && <div className="table-empty"><Search size={20} /><strong>{t(language, 'No requests found')}</strong><span>{t(language, 'Try a different name, username, or date.')}</span></div>}</div>
               <div className="table-foot"><span>{language === 'am' ? `${filteredRequests.length} ከ ${requests.length} ጥያቄዎች እየታዩ ነው` : `Showing ${filteredRequests.length} of ${requests.length} requests`}</span><span><span className="online-dot" /> {t(language, 'Up to date')}</span></div>
             </section>
@@ -1048,7 +1133,7 @@ function App() {
                       <div className="history-item" key={h.id || i}>
                         <div className="history-header">
                           <span className="history-title">{h.title || 'Broadcast'}</span>
-                          <span className="history-time">{h.sentAt ? formatDate(h.sentAt.slice(0, 10), language) : ''}</span>
+                          <span className="history-time">{h.sentAt ? formatDateTime(h.sentAt, language) : ''}</span>
                         </div>
                         <div className="history-snippet">{h.message}</div>
                         <div className="history-stats">
@@ -1076,6 +1161,44 @@ function App() {
                 return <button type="button" role="tab" key={tab.id} aria-selected={mezmurFilter === tab.id} className={mezmurFilter === tab.id ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setMezmurFilter(tab.id)}>{t(language, tab.label)}<span className="mezmur-tab-count">{count}</span></button>
               })}
             </div>
+            {adminAuthenticated && pendingSeeds.length > 0 && (
+              <section className="seed-review" aria-label={t(language, 'Songbook approval')}>
+                <div className="seed-review-head">
+                  <div>
+                    <strong>{language === 'am' ? `${pendingSeeds.length} የመዝሙር ጥራዝ መዝሙሮች ይሁንታ ይጠብቃሉ` : `${pendingSeeds.length} songbook songs are waiting for approval`}</strong>
+                    <span>{t(language, 'They are hidden from everyone until you approve them.')}</span>
+                  </div>
+                  <button type="button" className="export-button seed-toggle" onClick={() => setSeedReviewOpen((open) => !open)} aria-expanded={seedReviewOpen}>
+                    {t(language, seedReviewOpen ? 'Hide' : 'Review')} <ChevronDown size={15} className={seedReviewOpen ? 'seed-chevron open' : 'seed-chevron'} />
+                  </button>
+                </div>
+                {seedReviewOpen && (
+                  <>
+                    <div className="seed-review-toolbar">
+                      <span>{language === 'am' ? `${visibleSeeds.filter((s) => selectedSeeds.has(s.seedKey)).length} ከ ${visibleSeeds.length} ተመርጠዋል` : `${visibleSeeds.filter((s) => selectedSeeds.has(s.seedKey)).length} of ${visibleSeeds.length} selected`}</span>
+                      <button type="button" className="seed-link" onClick={() => setVisibleSeedsSelected(true)}>{t(language, 'Select all')}</button>
+                      <button type="button" className="seed-link" onClick={() => setVisibleSeedsSelected(false)}>{t(language, 'Select none')}</button>
+                    </div>
+                    <ul className="seed-list">
+                      {visibleSeeds.map((song) => (
+                        <li key={song.seedKey}>
+                          <input type="checkbox" checked={selectedSeeds.has(song.seedKey)} onChange={() => toggleSeed(song.seedKey)} aria-label={song.title} />
+                          <details>
+                            <summary><span className="seed-title">{song.title}</span><span className="seed-category">{t(language, mezmurCategories.find((c) => c.id === song.category)?.label ?? '')}</span></summary>
+                            <div className="lyrics-readonly-text seed-preview">{song.lyrics}</div>
+                          </details>
+                        </li>
+                      ))}
+                      {visibleSeeds.length === 0 && <li className="empty-copy">{t(language, 'No songs waiting in this category.')}</li>}
+                    </ul>
+                    <div className="seed-review-actions">
+                      <button type="button" className="reject-seed-button" disabled={seedBusy || !visibleSeeds.some((s) => selectedSeeds.has(s.seedKey))} onClick={() => reviewSeeds('reject-seed')}><X size={15} /> {t(language, 'Reject selected')}</button>
+                      <button type="button" className="submit-button" disabled={seedBusy || !visibleSeeds.some((s) => selectedSeeds.has(s.seedKey))} onClick={() => reviewSeeds('approve-seed')}><Check size={15} /> {t(language, 'Approve & publish selected')}</button>
+                    </div>
+                  </>
+                )}
+              </section>
+            )}
             <section className="lyrics-grid" aria-label={t(language, 'Mezmur')}>
               {lyricsLoading && lyricsBoxes.length === 0 && <p className="empty-copy">{language === 'am' ? 'በመጫን ላይ…' : 'Loading lyrics…'}</p>}
               {visibleLyrics.map((box, index) => <article className="lyrics-box" key={box.id}>
