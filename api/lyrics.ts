@@ -1,7 +1,11 @@
 import { ObjectId } from 'mongodb'
 import type { VercelRequest, VercelResponse } from './_lib/http.js'
-import { lyricsCollection, toLyricsBox, type LyricsRecord } from './_lib/mongo.js'
+import { lyricsCollection, toLyricsBox, MEZMUR_CATEGORIES, type LyricsRecord, type MezmurCategory } from './_lib/mongo.js'
 import { isAdmin } from './_lib/security.js'
+
+function isCategory(value: unknown): value is MezmurCategory {
+  return typeof value === 'string' && (MEZMUR_CATEGORIES as readonly string[]).includes(value)
+}
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   try {
@@ -16,17 +20,21 @@ export default async function handler(request: VercelRequest, response: VercelRe
     if (request.method === 'POST') {
       if (!isAdmin(request)) return response.status(401).json({ error: 'Admin sign-in is required.' })
 
-      const { title, lyrics } = request.body ?? {}
+      const { title, lyrics, category } = request.body ?? {}
       if (typeof title !== 'string' || title.trim().length < 1 || title.length > 500) {
         return response.status(400).json({ error: 'Please provide a valid song title.' })
       }
       if (typeof lyrics !== 'string' || lyrics.length > 50000) {
         return response.status(400).json({ error: 'Please provide valid lyrics content.' })
       }
+      if (category !== undefined && !isCategory(category)) {
+        return response.status(400).json({ error: 'Please provide a valid category.' })
+      }
 
       const record: LyricsRecord = {
         title: title.trim(),
         lyrics: lyrics.trim(),
+        ...(category ? { category } : {}),
         createdAt: new Date().toISOString(),
       }
       const collection = await lyricsCollection()
@@ -38,7 +46,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     if (request.method === 'PUT') {
       if (!isAdmin(request)) return response.status(401).json({ error: 'Admin sign-in is required.' })
 
-      const { id, title, lyrics } = request.body ?? {}
+      const { id, title, lyrics, category } = request.body ?? {}
       if (typeof id !== 'string' || !ObjectId.isValid(id)) {
         return response.status(400).json({ error: 'Invalid lyrics box ID.' })
       }
@@ -48,11 +56,21 @@ export default async function handler(request: VercelRequest, response: VercelRe
       if (typeof lyrics !== 'string' || lyrics.length > 50000) {
         return response.status(400).json({ error: 'Please provide valid lyrics content.' })
       }
+      // category: omitted = unchanged, null/'' = uncategorized, otherwise must be a known category
+      if (category !== undefined && category !== null && category !== '' && !isCategory(category)) {
+        return response.status(400).json({ error: 'Please provide a valid category.' })
+      }
+
+      const update = category === undefined
+        ? { $set: { title: title.trim(), lyrics: lyrics.trim() } }
+        : isCategory(category)
+          ? { $set: { title: title.trim(), lyrics: lyrics.trim(), category } }
+          : { $set: { title: title.trim(), lyrics: lyrics.trim() }, $unset: { category: '' as const } }
 
       const collection = await lyricsCollection()
       const result = await collection.findOneAndUpdate(
         { _id: new ObjectId(id) },
-        { $set: { title: title.trim(), lyrics: lyrics.trim() } },
+        update,
         { returnDocument: 'after' },
       )
       if (!result) return response.status(404).json({ error: 'Lyrics box not found.' })

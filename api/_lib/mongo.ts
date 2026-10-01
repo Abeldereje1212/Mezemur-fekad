@@ -36,9 +36,14 @@ export function toPermissionRequest(document: PermissionRecord & { _id: { toStri
   return { ...record, id: _id.toString() }
 }
 
+export const MEZMUR_CATEGORIES = ['michael', 'zewetir', 'meskel', 'lidet', 'timket'] as const
+export type MezmurCategory = typeof MEZMUR_CATEGORIES[number]
+
 export interface LyricsRecord extends Document {
   title: string
   lyrics: string
+  category?: MezmurCategory
+  seedKey?: string
   createdAt: string
 }
 

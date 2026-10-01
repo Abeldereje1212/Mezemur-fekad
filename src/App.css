@@ -154,6 +154,12 @@
 
 .mezmur-heading { align-items: flex-end; margin-bottom: 25px; }
 .add-lyrics-button { flex: 0 0 auto; margin-bottom: 3px; }
+.mezmur-tabs { margin-bottom: 18px; display: flex; flex-wrap: wrap; gap: 7px; }
+.mezmur-tab { min-height: 32px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #dbe2d7; border-radius: 16px; background: #f7f8f3; color: #4f5c51; font: 600 11px/1 var(--sans); cursor: pointer; transition: background .16s, border-color .16s, color .16s; }
+.mezmur-tab:hover { background: #e6ede3; border-color: #9cb598; }
+.mezmur-tab.active { background: var(--green); border-color: var(--green); color: #fff; }
+.mezmur-tab-count { min-width: 18px; padding: 2px 5px; border-radius: 9px; background: rgba(50,109,75,.1); font-size: 9px; text-align: center; }
+.mezmur-tab.active .mezmur-tab-count { background: rgba(255,255,255,.22); }
 .lyrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; align-items: start; }
 .lyrics-box { min-width: 0; padding: 18px; border: 1px solid var(--line); background: #fffefa; animation: enter .3s ease-out both; }
 .lyrics-box-heading { min-height: 27px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; color: #657668; font-size: 9px; font-weight: 750; letter-spacing: .7px; text-transform: uppercase; }
@@ -608,6 +614,8 @@ td .status-badge { margin-top: 0; }
   .mezmur-heading { gap: 12px; align-items: flex-start; }
   .mezmur-heading .add-lyrics-button { margin-top: 0; padding-inline: 9px; gap: 6px; font-size: 9px; }
   .mezmur-heading .add-lyrics-button svg { width: 14px; height: 14px; }
+  .mezmur-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .mezmur-tab { flex: 0 0 auto; }
   .lyrics-grid { grid-template-columns: 1fr; gap: 11px; }
   .lyrics-box { padding: 15px; }
   .lyrics-box .lyrics-text-field textarea { min-height: 170px; }

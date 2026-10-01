@@ -9,6 +9,7 @@
     "build": "tsc -b && tsc -p tsconfig.api.json && vite build",
     "typecheck:api": "tsc -p tsconfig.api.json",
     "lint": "oxlint",
+    "seed:mezmur": "dotenv -e .env.local -- node scripts/seed-mezmur.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

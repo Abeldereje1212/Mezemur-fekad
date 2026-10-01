@@ -61,11 +61,23 @@ interface PermissionRequest {
   submittedAt: string
 }
 
+type MezmurCategory = 'michael' | 'zewetir' | 'meskel' | 'lidet' | 'timket'
+type MezmurFilter = 'all' | MezmurCategory
+
 interface LyricsBox {
   id: string
   title: string
   lyrics: string
+  category?: MezmurCategory
 }
+
+const mezmurCategories: { id: MezmurCategory; label: string }[] = [
+  { id: 'michael', label: 'St. Michael' },
+  { id: 'zewetir', label: 'Everyday' },
+  { id: 'meskel', label: 'Meskel' },
+  { id: 'lidet', label: 'Nativity' },
+  { id: 'timket', label: 'Epiphany' },
+]
 
 interface TelegramUser {
   id?: number
@@ -138,6 +150,10 @@ const translations: Record<Language, Record<string, string>> = {
     'No lyrics have been added yet.': 'ገና ምንም ግጥም አልተጨመረም።',
     'Untitled': 'ርዕስ የሌለው',
     'No lyrics yet.': 'ገና ግጥም የለም።',
+    'All': 'ሁሉም', 'St. Michael': 'ቅዱስ ሚካኤል', 'Everyday': 'ዘወትር', 'Meskel': 'መስቀል', 'Nativity': 'ልደት', 'Epiphany': 'ጥምቀት',
+    'Category': 'ምድብ', 'No category': 'ምድብ የለም', 'Mezmur categories': 'የመዝሙር ምድቦች',
+    'No lyrics in this category yet.': 'በዚህ ምድብ ገና ግጥም የለም።',
+    'Please provide a valid category.': 'እባክዎ ትክክለኛ ምድብ ይምረጡ።',
     'Notifier': 'የማሳወቂያ ክፍል',
     'NOTIFIER PANEL': 'የማሳወቂያ ክፍል',
     'Telegram notifier': 'የቴሌግራም መልእክት ማስተላለፊያ',
@@ -254,6 +270,8 @@ function App() {
   const [requests, setRequests] = useState<PermissionRequest[]>(() => readRequests())
   const [lyricsBoxes, setLyricsBoxes] = useState<LyricsBox[]>([])
   const [lyricsLoading, setLyricsLoading] = useState(false)
+  const [mezmurFilter, setMezmurFilter] = useState<MezmurFilter>('all')
+  const visibleLyrics = mezmurFilter === 'all' ? lyricsBoxes : lyricsBoxes.filter((box) => box.category === mezmurFilter)
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'am' ? 'am' : 'en')
   const [view, setView] = useState<AppView>('requests')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -510,14 +528,21 @@ function App() {
     setLyricsBoxes((current) => current.map((box) => box.id === id ? { ...box, [field]: value } : box))
   }
 
-  async function saveLyricsBox(id: string) {
+  function updateLyricsCategory(id: string, category: MezmurCategory | undefined) {
     const box = lyricsBoxes.find((b) => b.id === id)
+    if (!box) return
+    setLyricsBoxes((current) => current.map((b) => b.id === id ? { ...b, category } : b))
+    void saveLyricsBox(id, { ...box, category })
+  }
+
+  async function saveLyricsBox(id: string, override?: LyricsBox) {
+    const box = override ?? lyricsBoxes.find((b) => b.id === id)
     if (!box) return
     try {
       const response = await fetch('/api/lyrics', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, title: box.title, lyrics: box.lyrics }),
+        body: JSON.stringify({ id, title: box.title, lyrics: box.lyrics, category: box.category ?? null }),
       })
       if (!response.ok) {
         const result = await response.json()
@@ -534,7 +559,7 @@ function App() {
       const response = await fetch('/api/lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Untitled', lyrics: '' }),
+        body: JSON.stringify({ title: 'Untitled', lyrics: '', ...(mezmurFilter !== 'all' ? { category: mezmurFilter } : {}) }),
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Could not add lyrics.')
@@ -1045,13 +1070,20 @@ function App() {
               <div><div className="eyebrow"><span className="eyebrow-line" /> BIRHANE HIWOT</div><h1>{t(language, 'Mezmur')}<span className="heading-period">.</span></h1><p>{t(language, 'Keep song lyrics together in one place.')}</p></div>
               {adminAuthenticated && <button type="button" className="submit-button add-lyrics-button" onClick={addLyricsBox}><Plus size={16} /> {t(language, 'Add lyrics box')}</button>}
             </section>
+            <div className="mezmur-tabs" role="tablist" aria-label={t(language, 'Mezmur categories')}>
+              {([{ id: 'all', label: 'All' }, ...mezmurCategories] as { id: MezmurFilter; label: string }[]).map((tab) => {
+                const count = tab.id === 'all' ? lyricsBoxes.length : lyricsBoxes.filter((box) => box.category === tab.id).length
+                return <button type="button" role="tab" key={tab.id} aria-selected={mezmurFilter === tab.id} className={mezmurFilter === tab.id ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setMezmurFilter(tab.id)}>{t(language, tab.label)}<span className="mezmur-tab-count">{count}</span></button>
+              })}
+            </div>
             <section className="lyrics-grid" aria-label={t(language, 'Mezmur')}>
               {lyricsLoading && lyricsBoxes.length === 0 && <p className="empty-copy">{language === 'am' ? 'በመጫን ላይ…' : 'Loading lyrics…'}</p>}
-              {lyricsBoxes.map((box, index) => <article className="lyrics-box" key={box.id}>
+              {visibleLyrics.map((box, index) => <article className="lyrics-box" key={box.id}>
                 <div className="lyrics-box-heading"><span><Music2 size={16} /> {t(language, 'Lyrics')} {String(index + 1).padStart(2, '0')}</span>{adminAuthenticated && <button type="button" className="remove-lyrics-button" onClick={() => removeLyricsBox(box.id)} aria-label={`${t(language, 'Remove lyrics box')} ${index + 1}`} title={t(language, 'Remove lyrics box')}><X size={16} /></button>}</div>
                 {adminAuthenticated ? (
                   <>
                     <label className="field"><span>{t(language, 'Song title')}</span><input value={box.title} onChange={(event) => updateLyricsBox(box.id, 'title', event.target.value)} onBlur={() => saveLyricsBox(box.id)} placeholder={t(language, 'Song title')} /></label>
+                    <label className="field"><span>{t(language, 'Category')}</span><select value={box.category ?? ''} onChange={(event) => updateLyricsCategory(box.id, (event.target.value || undefined) as MezmurCategory | undefined)}><option value="">{t(language, 'No category')}</option>{mezmurCategories.map((category) => <option key={category.id} value={category.id}>{t(language, category.label)}</option>)}</select></label>
                     <label className="field lyrics-text-field"><span>{t(language, 'Lyrics')}</span><textarea value={box.lyrics} onChange={(event) => updateLyricsBox(box.id, 'lyrics', event.target.value)} onBlur={() => saveLyricsBox(box.id)} placeholder={t(language, 'Write or paste the lyrics here...')} rows={8} /></label>
                   </>
                 ) : (
@@ -1061,10 +1093,10 @@ function App() {
                   </>
                 )}
               </article>)}
-              {!lyricsLoading && lyricsBoxes.length === 0 && (
+              {!lyricsLoading && visibleLyrics.length === 0 && (
                 adminAuthenticated
                   ? <button type="button" className="empty-lyrics-button" onClick={addLyricsBox}><Plus size={17} /> {t(language, 'Add lyrics box')}</button>
-                  : <p className="empty-copy">{t(language, 'No lyrics have been added yet.')}</p>
+                  : <p className="empty-copy">{t(language, mezmurFilter === 'all' ? 'No lyrics have been added yet.' : 'No lyrics in this category yet.')}</p>
               )}
             </section>
           </div>
