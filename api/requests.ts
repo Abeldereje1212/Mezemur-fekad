@@ -5,6 +5,52 @@ import { getTelegramUser, isAdmin } from './_lib/security.js'
 
 const permissionTypes = new Set(['Annual leave', 'Sick leave', 'Personal leave', 'Late arrival', 'Early departure', 'Other'])
 
+const permissionTypeAmharic: Record<string, string> = {
+  'Annual leave': 'ዓመታዊ ፈቃድ', 'Sick leave': 'የሕመም ፈቃድ', 'Personal leave': 'የግል ፈቃድ',
+  'Late arrival': 'ዘግይቶ መግባት', 'Early departure': 'ቀድሞ መውጣት', 'Other': 'ሌላ',
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Sends a Telegram alert about a new request to every chat ID in ADMIN_TELEGRAM_IDS (comma-separated).
+// Awaited by the caller so the serverless function is not frozen before the messages go out.
+async function notifyAdminsOfNewRequest(record: PermissionRecord) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN
+  const adminIds = (process.env.ADMIN_TELEGRAM_IDS ?? '').split(',').map((id) => id.trim()).filter(Boolean)
+  if (!botToken || adminIds.length === 0) return
+
+  const submitted = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Addis_Ababa', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(record.submittedAt))
+  const text = [
+    `📥 <b>አዲስ የፈቃድ ጥያቄ / New permission request</b>`,
+    ``,
+    `👤 <b>${escapeHtml(record.name)}</b> (${escapeHtml(record.username)})`,
+    `📞 ${escapeHtml(record.phone)}`,
+    `📝 ${escapeHtml(permissionTypeAmharic[record.type] ?? record.type)} (${escapeHtml(record.type)})`,
+    `📅 ለ / For: <b>${escapeHtml(record.date)}</b>`,
+    `💬 ${escapeHtml(record.reason)}`,
+    ``,
+    `🕒 የተላከው / Submitted: ${submitted}`,
+    `ለመገምገም መተግበሪያውን ይክፈቱ። / Open the app to review.`,
+  ].join('\n')
+
+  const results = await Promise.allSettled(adminIds.map(async (chatId) => {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) throw new Error(`chat ${chatId}: HTTP ${res.status}`)
+  }))
+  for (const result of results) {
+    if (result.status === 'rejected') console.error('Admin request alert failed:', result.reason instanceof Error ? result.reason.message : result.reason)
+  }
+}
+
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   try {
     if (request.method === 'GET') {
@@ -78,6 +124,8 @@ export default async function handler(request: VercelRequest, response: VercelRe
       }
       const collection = await permissionRequests()
       const result = await collection.insertOne(record)
+      // The request is already saved; an alert failure must not fail the submission.
+      await notifyAdminsOfNewRequest(record).catch((error) => console.error('Admin request alert error:', error))
       return response.status(201).json({ request: toPermissionRequest({ ...record, _id: result.insertedId }) })
     }
 

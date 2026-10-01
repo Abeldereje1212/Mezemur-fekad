@@ -38,6 +38,7 @@ Copy `.env.example` to `.env.local` for local Vercel development. Set these valu
 - `MONGODB_URI`: the full MongoDB Atlas connection URI, including a database user and password.
 - `MONGODB_DB`: database name; defaults to `birhane_hiwot`.
 - `TELEGRAM_BOT_TOKEN`: the bot token used to verify Telegram Mini App `initData`.
+- `ADMIN_TELEGRAM_IDS`: optional, comma-separated Telegram chat IDs (e.g. `123456789,987654321`) that get a bot message for every new permission request. Each admin must press **Start** in the bot once, otherwise Telegram blocks the message. To find your chat ID, message `@userinfobot` on Telegram.
 - `ADMIN_USERNAME`: the admin login username.
 - `ADMIN_PASSWORD`: a unique, strong admin password.
 - `SESSION_SECRET`: a random secret of at least 32 characters used to sign the HTTP-only admin session cookie.
