@@ -86,6 +86,17 @@ export function getTelegramUser(request: VercelRequest) {
   return verifyTelegramInitData(Array.isArray(header) ? header[0] : header)
 }
 
+export function telegramAuthFailure(request: VercelRequest) {
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    return { status: 503, code: 'TELEGRAM_NOT_CONFIGURED', error: 'Telegram authentication is not configured on the server.' }
+  }
+  const header = request.headers['x-telegram-init-data']
+  if (!(Array.isArray(header) ? header[0] : header)) {
+    return { status: 401, code: 'TELEGRAM_DATA_MISSING', error: 'Telegram sign-in data is missing. Close this app and reopen it using the bot’s Mini App button.' }
+  }
+  return { status: 401, code: 'TELEGRAM_DATA_INVALID', error: 'Telegram sign-in could not be verified. Close and reopen the Mini App. If this continues, the administrator must check the bot configuration.' }
+}
+
 export function constantTimeEqual(left: string, right: string) {
   return safeEqual(left, right)
 }

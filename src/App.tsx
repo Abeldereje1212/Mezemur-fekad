@@ -188,6 +188,8 @@ function App() {
   const [adminPassword, setAdminPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [toast, setToast] = useState('')
+  const [requestsReady, setRequestsReady] = useState(false)
+  const [requestError, setRequestError] = useState('')
   const [name, setName] = useState(initialName)
   const [username, setUsername] = useState(telegramUser?.username ? `@${telegramUser.username}` : '')
   const [phone, setPhone] = useState('')
@@ -213,12 +215,18 @@ function App() {
       .then((result) => {
         if (!active) return
         setRequests(result.requests)
+        setRequestsReady(true)
+        setRequestError('')
         if (result.role === 'admin') {
           setAdminAuthenticated(true)
           setView('admin')
         }
       })
       .catch((error: unknown) => {
+        if (active) {
+          setRequestsReady(false)
+          setRequestError(error instanceof Error ? error.message : 'Could not load requests.')
+        }
         if (active && !import.meta.env.DEV) {
           setRequests([])
           setToast(t(language, error instanceof Error ? error.message : 'The request service is temporarily unavailable.'))
@@ -228,6 +236,7 @@ function App() {
   }, [language])
 
   useEffect(() => {
+    if (!requestsReady) return
     const controller = new AbortController()
     let refreshing = false
     async function refreshRequests() {
@@ -237,6 +246,15 @@ function App() {
         const response = await fetch('/api/requests', {
           headers: telegramHeaders(), cache: 'no-store', signal: controller.signal,
         })
+        if (response.status === 401 || response.status === 403 || response.status === 503) {
+          const result = await response.json()
+          if (!controller.signal.aborted && (response.status !== 503 || result.code === 'TELEGRAM_NOT_CONFIGURED')) {
+            setRequestsReady(false)
+            setRequestError(result.error || 'Could not load requests.')
+            setRequests([])
+          }
+          return
+        }
         if (!response.ok) return
         const result = await response.json() as { role: 'admin' | 'user'; requests: PermissionRequest[] }
         if (!controller.signal.aborted && (result.role === 'admin') === adminAuthenticated) {
@@ -258,7 +276,7 @@ function App() {
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
-  }, [adminAuthenticated])
+  }, [adminAuthenticated, requestsReady])
 
   useEffect(() => {
     localStorage.setItem(LANGUAGE_KEY, language)
@@ -324,6 +342,8 @@ function App() {
       const requestsResult = await requestsResponse.json()
       if (!requestsResponse.ok) throw new Error(requestsResult.error || 'Could not load requests.')
       setRequests(requestsResult.requests)
+      setRequestsReady(true)
+      setRequestError('')
       setAdminAuthenticated(true)
       setShowAdminLogin(false)
       setAdminPassword('')
@@ -334,6 +354,7 @@ function App() {
   }
 
   async function signOutAdmin() {
+    setRequestsReady(false)
     await fetch('/api/admin/logout', { method: 'POST' }).catch(() => undefined)
     setAdminAuthenticated(false)
     setView('requests')
@@ -344,6 +365,8 @@ function App() {
       if (!response.ok) throw new Error('Could not load personal requests.')
       const result = await response.json()
       setRequests(result.requests)
+      setRequestsReady(true)
+      setRequestError('')
     } catch {
       setRequests(import.meta.env.DEV ? readRequests() : [])
     }
@@ -433,6 +456,7 @@ function App() {
       </aside>
 
       <main className="main-area">
+        {requestError && <p className="login-error" role="alert">{t(language, requestError)}</p>}
         <header className="topbar">
           <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'mezmur' ? 'MEZMUR' : 'PERMISSION DESK')}</strong></div>
           <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<div className="topbar-avatar">{initialName ? initialName.charAt(0).toUpperCase() : 'B'}</div><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button></nav>}</div></div>
