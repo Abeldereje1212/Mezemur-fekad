@@ -111,7 +111,7 @@ const translations: Record<Language, Record<string, string>> = {
     'Request statuses refresh automatically every 10 seconds.': 'የጥያቄዎች ሁኔታ በየ10 ሰከንዱ በራስ ሰር ይዘምናል።',
     'WORKPLACE': 'የሥራ ቦታ', 'WORKSPACE': 'የሥራ ቦታ', 'My requests': 'የእኔ ፈቃዶች', 'Admin review': 'የአስተዳዳሪ ግምገማ',
     'Request desk is open': 'የፈቃድ ጥያቄ ክፍት ነው', 'ADMIN REVIEW': 'የአስተዳዳሪ ግምገማ', 'PERMISSION DESK': 'የፈቃድ ጥያቄ',
-    'PEOPLE OPERATIONS': 'የሰራተኞች አስተዳደር', 'Permission desk': 'የፈቃድ ጥያቄ', 'Request time away and keep track of every update.': 'የፈቃድ ጥያቄ ያቅርቡ እና ሁኔታውን ይከታተሉ።',
+    'MEZEMERAN FEKAD': 'መዘምራን ፈቃድ', 'Permission desk': 'የፈቃድ ጥያቄ', 'Request time away and keep track of every update.': 'የፈቃድ ጥያቄ ያቅርቡ እና ሁኔታውን ይከታተሉ።',
     'RESPONSE TIME': 'የምላሽ ጊዜ', 'Usually within 1 day': 'ብዙውን ጊዜ በ1 ቀን ውስጥ', 'Awaiting review': 'ግምገማ በመጠባበቅ ላይ',
     'Approved': 'ተፈቅዷል', 'Rejected': 'ውድቅ ተደርጓል', 'Not approved': 'አልተፈቀደም', 'YOUR TIME': 'ጊዜዎ', 'MATTERS HERE': 'አስፈላጊ ነው',
     'NEW SUBMISSION': 'አዲስ ጥያቄ', 'Request permission': 'ፈቃድ ይጠይቁ', 'Share the details below. Your admin will review and get back to you.': 'ከታች ያሉትን ዝርዝሮች ያስገቡ። አስተዳዳሪው ጥያቄዎን ይገመግማል።',
@@ -122,7 +122,7 @@ const translations: Record<Language, Record<string, string>> = {
     'By submitting, this will be shared with your admin.': 'ይህ ጥያቄ ለአስተዳዳሪው ይላካል።', 'Send request': 'ጥያቄ ላክ', 'Your request has been sent to the admin.': 'ጥያቄዎ ለአስተዳዳሪው ተልኳል።',
     'YOUR ACTIVITY': 'የእኔ ጥያቄዎች', 'Recent requests': 'የቅርብ ጊዜ ጥያቄዎች', 'Your requests will show up here.': 'ጥያቄዎችዎ እዚህ ይታያሉ።',
     'Open request log': 'ሁሉንም ጥያቄዎች ይመልከቱ', 'Plans change. A little notice helps everyone stay in sync.': 'ዕቅዶች ሊቀየሩ ይችላሉ። አስቀድሞ ማሳወቅ ሁሉንም ያግዛል።',
-    'PEOPLE TEAM': 'የሰራተኞች ቡድን', 'PEOPLE OPERATIONS / ADMIN': 'የሰራተኞች አስተዳደር / አስተዳዳሪ', 'Request log': 'የጥያቄ ዝርዝር',
+    'PEOPLE TEAM': 'የሰራተኞች ቡድን', 'MEZEMERAN FEKAD / ADMIN': 'መዘምራን ፈቃድ / አስተዳዳሪ', 'Request log': 'የጥያቄ ዝርዝር',
     'Review requests and keep the team moving.': 'ጥያቄዎችን ይገምግሙ እና ቡድኑን ያስተባብሩ።', 'NEEDS YOUR ATTENTION': 'ግምገማ የሚጠብቁ',
     'pending': 'በመጠባበቅ ላይ', 'ALL REQUESTS': 'ሁሉም ጥያቄዎች', 'REJECTED': 'ውድቅ የተደረጉ', 'OPEN': 'ክፍት',
     'INBOX': 'ጥያቄዎች', 'All permissions': 'ሁሉም ፈቃዶች', 'Clear filters': 'ማጣሪያዎችን አጽዳ',
@@ -822,7 +822,7 @@ function App() {
         {view === 'requests' ? (
           <div className="page-content">
             <section className="page-heading">
-              <div><div className="eyebrow"><span className="eyebrow-line" /> {t(language, 'PEOPLE OPERATIONS')}</div><h1>{t(language, 'Permission desk')}<span className="heading-period">.</span></h1><p>{t(language, 'Request time away and keep track of every update.')}</p></div>
+              <div><div className="eyebrow"><span className="eyebrow-line" /> {t(language, 'MEZEMERAN FEKAD')}</div><h1>{t(language, 'Permission desk')}<span className="heading-period">.</span></h1><p>{t(language, 'Request time away and keep track of every update.')}</p></div>
               <div className="heading-stamp"><Clock3 size={15} /> {t(language, 'RESPONSE TIME')} <strong>{t(language, 'Usually within 1 day')}</strong></div>
             </section>
 
@@ -890,7 +890,7 @@ function App() {
         ) : view === 'admin' ? (
           <div className="page-content admin-content">
             <section className="page-heading admin-heading">
-              <div><div className="eyebrow"><span className="eyebrow-line" /> {t(language, 'PEOPLE OPERATIONS / ADMIN')}</div><h1>{t(language, 'Request log')}<span className="heading-period">.</span></h1><p>{t(language, 'Review requests and keep the team moving.')}</p></div>
+              <div><div className="eyebrow"><span className="eyebrow-line" /> {t(language, 'MEZEMERAN FEKAD / ADMIN')}</div><h1>{t(language, 'Request log')}<span className="heading-period">.</span></h1><p>{t(language, 'Review requests and keep the team moving.')}</p></div>
               <div className="admin-count"><span>{t(language, 'NEEDS YOUR ATTENTION')}</span><strong>{pendingCount.toString().padStart(2, '0')} <small>{t(language, 'pending')}</small></strong></div>
             </section>
             <section className="admin-summary"><div><span>{t(language, 'ALL REQUESTS')}</span><strong>{requests.length.toString().padStart(2, '0')}</strong></div><div><span>{t(language, 'Approved').toUpperCase()}</span><strong>{approvedCount.toString().padStart(2, '0')}</strong></div><div><span>{t(language, 'REJECTED')}</span><strong>{rejectedCount.toString().padStart(2, '0')}</strong></div><div className="summary-accent"><span>{t(language, 'OPEN')}</span><strong>{pendingCount.toString().padStart(2, '0')}</strong></div></section>
@@ -907,7 +907,7 @@ function App() {
           <div className="page-content notifier-content">
             <section className="page-heading notifier-heading">
               <div>
-                <div className="eyebrow"><span className="eyebrow-line" /> {t(language, 'PEOPLE OPERATIONS / ADMIN')}</div>
+                <div className="eyebrow"><span className="eyebrow-line" /> {t(language, 'MEZEMERAN FEKAD / ADMIN')}</div>
                 <h1>{t(language, 'Telegram notifier')}<span className="heading-period">.</span></h1>
                 <p>{t(language, 'Broadcast announcements and direct notifications to Telegram users.')}</p>
               </div>
