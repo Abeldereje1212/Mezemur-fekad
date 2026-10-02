@@ -51,16 +51,27 @@ export interface VerifiedTelegramUser {
   last_name?: string
 }
 
-export function verifyTelegramInitData(initData: string | undefined): VerifiedTelegramUser | null {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN
-  if (!botToken || !initData) return null
+const INIT_DATA_MAX_AGE_SECONDS = 60 * 60 * 24
+
+// Tokens pasted into hosting dashboards often pick up a trailing newline, spaces or quotes,
+// which silently breaks every signature check.
+export function telegramBotToken() {
+  return process.env.TELEGRAM_BOT_TOKEN?.trim().replace(/^["']|["']$/g, '').trim() || undefined
+}
+
+type InitDataProblem = 'not_configured' | 'missing' | 'malformed' | 'expired' | 'signature_mismatch'
+
+function checkTelegramInitData(initData: string | undefined): { user: VerifiedTelegramUser } | { problem: InitDataProblem } {
+  const botToken = telegramBotToken()
+  if (!botToken) return { problem: 'not_configured' }
+  if (!initData) return { problem: 'missing' }
 
   const params = new URLSearchParams(initData)
   const hash = params.get('hash')
   const authDate = Number(params.get('auth_date'))
   const userText = params.get('user')
-  if (!hash || !/^[a-f0-9]{64}$/i.test(hash) || !Number.isFinite(authDate) || !userText) return null
-  if (Math.abs(Math.floor(Date.now() / 1000) - authDate) > 60 * 60 * 24) return null
+  if (!hash || !/^[a-f0-9]{64}$/i.test(hash) || !Number.isFinite(authDate) || !userText) return { problem: 'malformed' }
+  if (Math.abs(Math.floor(Date.now() / 1000) - authDate) > INIT_DATA_MAX_AGE_SECONDS) return { problem: 'expired' }
 
   const dataCheckString = [...params.entries()]
     .filter(([key]) => key !== 'hash')
@@ -70,31 +81,48 @@ export function verifyTelegramInitData(initData: string | undefined): VerifiedTe
   const secretKey = createHmac('sha256', 'WebAppData').update(botToken).digest()
   const expectedHash = createHmac('sha256', secretKey).update(dataCheckString).digest()
   const suppliedHash = Buffer.from(hash, 'hex')
-  if (suppliedHash.length !== expectedHash.length || !timingSafeEqual(suppliedHash, expectedHash)) return null
+  if (suppliedHash.length !== expectedHash.length || !timingSafeEqual(suppliedHash, expectedHash)) return { problem: 'signature_mismatch' }
 
   try {
     const user = JSON.parse(userText) as Omit<VerifiedTelegramUser, 'id'> & { id: number | string }
-    if (user.id === undefined || user.id === null) return null
-    return { ...user, id: String(user.id) }
+    if (user.id === undefined || user.id === null) return { problem: 'malformed' }
+    return { user: { ...user, id: String(user.id) } }
   } catch {
-    return null
+    return { problem: 'malformed' }
   }
+}
+
+export function verifyTelegramInitData(initData: string | undefined): VerifiedTelegramUser | null {
+  const result = checkTelegramInitData(initData)
+  return 'user' in result ? result.user : null
+}
+
+function initDataHeader(request: VercelRequest) {
+  const header = request.headers['x-telegram-init-data']
+  return Array.isArray(header) ? header[0] : header
 }
 
 export function getTelegramUser(request: VercelRequest) {
-  const header = request.headers['x-telegram-init-data']
-  return verifyTelegramInitData(Array.isArray(header) ? header[0] : header)
+  return verifyTelegramInitData(initDataHeader(request))
 }
 
 export function telegramAuthFailure(request: VercelRequest) {
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    return { status: 503, code: 'TELEGRAM_NOT_CONFIGURED', error: 'Telegram authentication is not configured on the server.' }
+  const result = checkTelegramInitData(initDataHeader(request))
+  const problem = 'problem' in result ? result.problem : 'malformed'
+  // Logged (never the token or init data) so the cause shows up in the Vercel function logs.
+  console.warn('Telegram sign-in rejected:', problem)
+  switch (problem) {
+    case 'not_configured':
+      return { status: 503, code: 'TELEGRAM_NOT_CONFIGURED', error: 'Telegram authentication is not configured on the server.' }
+    case 'missing':
+      return { status: 401, code: 'TELEGRAM_DATA_MISSING', error: 'Telegram sign-in data is missing. Close this app and reopen it using the bot’s Mini App button.' }
+    case 'expired':
+      return { status: 401, code: 'TELEGRAM_DATA_EXPIRED', error: 'Your Telegram session is more than a day old. Close the Mini App completely and open it again from the bot.' }
+    case 'signature_mismatch':
+      return { status: 401, code: 'TELEGRAM_BOT_MISMATCH', error: 'Telegram sign-in could not be verified: the server’s bot token does not match the bot this app was opened from. The administrator must check TELEGRAM_BOT_TOKEN.' }
+    default:
+      return { status: 401, code: 'TELEGRAM_DATA_INVALID', error: 'Telegram sign-in could not be verified. Close and reopen the Mini App. If this continues, the administrator must check the bot configuration.' }
   }
-  const header = request.headers['x-telegram-init-data']
-  if (!(Array.isArray(header) ? header[0] : header)) {
-    return { status: 401, code: 'TELEGRAM_DATA_MISSING', error: 'Telegram sign-in data is missing. Close this app and reopen it using the bot’s Mini App button.' }
-  }
-  return { status: 401, code: 'TELEGRAM_DATA_INVALID', error: 'Telegram sign-in could not be verified. Close and reopen the Mini App. If this continues, the administrator must check the bot configuration.' }
 }
 
 export function constantTimeEqual(left: string, right: string) {

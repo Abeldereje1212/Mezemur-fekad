@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from './_lib/http.js'
 import { userVisitsCollection } from './_lib/mongo.js'
-import { getTelegramUser } from './_lib/security.js'
+import { getTelegramUser, telegramBotToken } from './_lib/security.js'
 
 function escapeHtml(text: string): string {
   return text
@@ -24,7 +24,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     return response.status(200).json({ notified: false, reason: 'not_telegram' })
   }
 
-  const botToken = process.env.TELEGRAM_BOT_TOKEN
+  const botToken = telegramBotToken()
   if (!botToken) {
     return response.status(200).json({ notified: false, reason: 'bot_token_missing' })
   }

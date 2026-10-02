@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb'
 import type { VercelRequest, VercelResponse } from './_lib/http.js'
 import { permissionRequests, toPermissionRequest, type PermissionRecord } from './_lib/mongo.js'
-import { getTelegramUser, isAdmin } from './_lib/security.js'
+import { getTelegramUser, isAdmin, telegramBotToken } from './_lib/security.js'
 
 const permissionTypes = new Set(['Annual leave', 'Sick leave', 'Personal leave', 'Late arrival', 'Early departure', 'Other'])
 
@@ -17,7 +17,7 @@ function escapeHtml(text: string): string {
 // Sends a Telegram alert about a new request to every chat ID in ADMIN_TELEGRAM_IDS (comma-separated).
 // Awaited by the caller so the serverless function is not frozen before the messages go out.
 async function notifyAdminsOfNewRequest(record: PermissionRecord) {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN
+  const botToken = telegramBotToken()
   const adminIds = (process.env.ADMIN_TELEGRAM_IDS ?? '').split(',').map((id) => id.trim()).filter(Boolean)
   if (!botToken || adminIds.length === 0) return
 
@@ -145,7 +145,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
       if (!result) return response.status(404).json({ error: 'Request was not found or was already reviewed.' })
 
       if (result.telegramId && !result.telegramId.startsWith('browser-')) {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN
+        const botToken = telegramBotToken()
         if (botToken) {
           const statusText = status === 'approved' ? '✅ ተፈቅዷል (Approved)' : '❌ አልተፈቀደም (Rejected)'
           const notificationMsg = [

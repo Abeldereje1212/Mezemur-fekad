@@ -110,6 +110,8 @@ const am: Record<string, string> = {
   'Please choose the session date and time.': 'እባክዎ የፕሮግራሙን ቀን እና ሰዓት ይምረጡ።',
   'The attendance service is temporarily unavailable.': 'የክትትል አገልግሎቱ ለጊዜው አይገኝም።',
   'Admin sign-in is required.': 'የአስተዳዳሪ መግቢያ ያስፈልጋል።',
+  'Your Telegram session is more than a day old. Close the Mini App completely and open it again from the bot.': 'የቴሌግራም ክፍለ-ጊዜዎ ከአንድ ቀን በላይ ሆኖታል። መተግበሪያውን ሙሉ በሙሉ ዘግተው ከቦቱ እንደገና ይክፈቱ።',
+  'Telegram sign-in could not be verified: the server’s bot token does not match the bot this app was opened from. The administrator must check TELEGRAM_BOT_TOKEN.': 'የቴሌግራም መግቢያ ማረጋገጥ አልተቻለም፤ በሰርቨሩ ያለው የቦት ቶከን መተግበሪያው ከተከፈተበት ቦት ጋር አይመሳሰልም። አስተዳዳሪው TELEGRAM_BOT_TOKEN ን ማረጋገጥ አለበት።',
 }
 
 const statusLabel: Record<AttendanceStatus, string> = { present: 'Present', absent: 'Absent', excused: 'Excused' }
