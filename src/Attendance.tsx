@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import QRCode from 'qrcode'
-import { Check, ClipboardCheck, Maximize2, Minus, QrCode, RotateCcw, Trash2, UserPlus, Users, X } from 'lucide-react'
+import { Check, ClipboardCheck, Maximize2, Minus, QrCode, RotateCcw, ScanLine, Trash2, UserPlus, Users, X } from 'lucide-react'
+import QrScanner from './QrScanner'
 
 type Language = 'en' | 'am'
 type AttendanceStatus = 'present' | 'absent' | 'excused'
@@ -76,6 +77,10 @@ const am: Record<string, string> = {
   'No check-in is open right now.': 'አሁን ክፍት የሆነ ምዝገባ የለም።',
   'Scan QR code': 'QR ኮድ ይቃኙ', 'or enter the 6-digit code': 'ወይም ባለ 6 አሃዝ ኮዱን ያስገቡ', 'Check in': 'ተመዝገብ',
   "You're checked in": 'ተመዝግበዋል', 'Scan the check-in QR code': 'የምዝገባ QR ኮዱን ይቃኙ',
+  'Starting camera…': 'ካሜራ በመክፈት ላይ…', 'Close scanner': 'ስካነሩን ዝጋ', 'Use Telegram scanner': 'የቴሌግራም ስካነር ተጠቀም',
+  'Point the camera at the QR code on the screen.': 'ካሜራውን በስክሪኑ ላይ ወዳለው QR ኮድ ያዙሩ።',
+  'Camera access was blocked. Allow the camera for Telegram, or enter the code below.': 'የካሜራ ፈቃድ ተከልክሏል። ለቴሌግራም ካሜራ ይፍቀዱ ወይም ኮዱን ከታች ያስገቡ።',
+  'The camera is not available here. Enter the code below.': 'ካሜራ እዚህ አይገኝም። ኮዱን ከታች ያስገቡ።',
   'My attendance': 'የእኔ መገኘት', 'No attendance yet.': 'ገና የመገኘት መዝገብ የለም።',
   'Present': 'ተገኝቷል', 'Absent': 'ቀርቷል', 'Excused': 'በፈቃድ',
   'New session': 'አዲስ ፕሮግራም', 'Session name': 'የፕሮግራሙ ስም', 'Date': 'ቀን', 'Start time': 'መጀመሪያ ሰዓት',
@@ -168,6 +173,7 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -220,19 +226,27 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
     }
   }
 
-  function scan() {
+  // Accepts the text read from a check-in QR code ("FEKAD-CHECKIN:123456") and checks in with it.
+  function handleScanned(text: string) {
+    const match = text.match(/(\d{6})/)
+    if (!match) return false
+    setScannerOpen(false)
+    void checkIn(match[1])
+    return true
+  }
+
+  const telegramScanner = (window.Telegram?.WebApp as unknown as ScannerWebApp | undefined)?.showScanQrPopup
+
+  // Telegram's own full-screen scanner; used when the in-page camera cannot start.
+  function telegramScan() {
     const webApp = window.Telegram?.WebApp as unknown as ScannerWebApp | undefined
+    setScannerOpen(false)
     if (!webApp?.showScanQrPopup) {
       notify(tx('or enter the 6-digit code'))
       return
     }
     try {
-      webApp.showScanQrPopup({ text: tx('Scan the check-in QR code') }, (text) => {
-        const match = text.match(/(\d{6})/)
-        if (!match) return false
-        void checkIn(match[1])
-        return true
-      })
+      webApp.showScanQrPopup({ text: tx('Scan the check-in QR code') }, handleScanned)
     } catch {
       notify(tx('or enter the 6-digit code'))
     }
@@ -276,7 +290,9 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
               <div className="att-done"><Check size={18} /> {tx("You're checked in")}</div>
             ) : (
               <>
-                <button type="button" className="submit-button att-scan" onClick={scan} disabled={busy}><QrCode size={17} /> {tx('Scan QR code')}</button>
+                {scannerOpen
+                  ? <QrScanner tx={tx} onResult={handleScanned} onClose={() => setScannerOpen(false)} fallback={telegramScanner ? { label: tx('Use Telegram scanner'), onClick: telegramScan } : undefined} />
+                  : <button type="button" className="submit-button att-scan" onClick={() => setScannerOpen(true)} disabled={busy}><ScanLine size={17} /> {tx('Scan QR code')}</button>}
                 <form className="att-code-form" onSubmit={(e) => { e.preventDefault(); void checkIn(code) }}>
                   <label className="field"><span>{tx('or enter the 6-digit code')}</span><input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" className="att-code-input" /></label>
                   <button type="submit" className="submit-button" disabled={busy || code.length !== 6}>{tx('Check in')}</button>

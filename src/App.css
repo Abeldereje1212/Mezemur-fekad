@@ -574,6 +574,22 @@ td .status-badge { margin-top: 0; }
 .att-scan { min-height: 46px; font-size: 12px; }
 .att-code-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
 .att-code-input { letter-spacing: 6px; font-size: 16px !important; text-align: center; }
+.qr-scanner { display: grid; gap: 8px; }
+.qr-scanner-view { position: relative; width: 100%; aspect-ratio: 1; max-height: 70vh; overflow: hidden; border-radius: 6px; background: #1d2620; }
+.qr-video { width: 100%; height: 100%; display: block; object-fit: cover; opacity: 0; transition: opacity .25s; }
+.qr-video.ready { opacity: 1; }
+.qr-frame { position: absolute; inset: 16%; pointer-events: none; }
+.qr-frame span { position: absolute; width: 26px; height: 26px; border: 3px solid #fff; filter: drop-shadow(0 0 2px rgba(0,0,0,.5)); }
+.qr-frame span:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 6px; }
+.qr-frame span:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 6px; }
+.qr-frame span:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 6px; }
+.qr-frame span:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 6px; }
+.qr-frame i { position: absolute; left: 6%; right: 6%; top: 0; height: 2px; border-radius: 1px; background: #7fd99a; box-shadow: 0 0 10px #7fd99a; animation: qr-sweep 2.2s ease-in-out infinite alternate; }
+@keyframes qr-sweep { to { top: 100%; } }
+.qr-scanner-message { position: absolute; inset: 0; padding: 22px; display: grid; place-content: center; justify-items: center; gap: 12px; color: #e9efe9; font-size: 12px; line-height: 1.5; text-align: center; }
+.qr-close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; cursor: pointer; }
+.qr-hint { margin: 0; color: #6f776e; font-size: 11px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .qr-frame i { animation: none; top: 50%; } }
 .att-done { padding: 14px; display: flex; align-items: center; gap: 9px; border-radius: 3px; background: #eaf1e7; color: #3f7a4c; font-size: 13px; font-weight: 650; }
 .att-rate { color: var(--green); font: 500 24px/1 var(--display); }
 .att-history,.att-member-list,.att-session-list,.att-roster { margin: 10px 0 0; padding: 0; list-style: none; }
