@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import QRCode from 'qrcode'
-import { Check, ClipboardCheck, Maximize2, Minus, QrCode, RotateCcw, ScanLine, Trash2, UserPlus, Users, X } from 'lucide-react'
+import { BarChart3, Check, ClipboardCheck, Maximize2, Minus, QrCode, RotateCcw, ScanLine, Trash2, UserPlus, Users, X } from 'lucide-react'
 import QrScanner from './QrScanner'
+import AttendanceReport from './AttendanceReport'
 
 type Language = 'en' | 'am'
 type AttendanceStatus = 'present' | 'absent' | 'excused'
@@ -97,6 +98,7 @@ const am: Record<string, string> = {
   'Remove this member from the attendance list?': 'ይህ አባል ከክትትል ዝርዝሩ ይወገድ?',
   'Waiting for approval': 'ይሁንታ የሚጠብቁ', 'Approved members': 'የጸደቁ አባላት',
   'No one is waiting.': 'የሚጠብቅ የለም።', 'No approved members yet.': 'ገና የጸደቀ አባል የለም።',
+  'Reports': 'ሪፖርቶች',
   'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Remove': 'አስወግድ', 'Clear mark': 'ምልክት አጽዳ',
   'No approved members yet. Approve members in the Members tab.': 'ገና የጸደቀ አባል የለም። በአባላት ክፍል ያጽድቁ።',
   // Server messages
@@ -148,7 +150,7 @@ export default function Attendance({ language, isAdmin, defaultName, headers, no
         </div>
       </section>
       {isAdmin
-        ? <AdminAttendance tx={tx} formatDateTime={formatDateTime} headers={headers} notify={notify} />
+        ? <AdminAttendance tx={tx} formatDateTime={formatDateTime} headers={headers} notify={notify} language={language} />
         : <MemberAttendance tx={tx} formatDateTime={formatDateTime} headers={headers} notify={notify} defaultName={defaultName} />}
     </div>
   )
@@ -322,8 +324,8 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
 
 // ---------------------------------------------------------------- Admin
 
-function AdminAttendance({ tx, formatDateTime, headers, notify }: SectionProps) {
-  const [tab, setTab] = useState<'sessions' | 'members'>('sessions')
+function AdminAttendance({ tx, formatDateTime, headers, notify, language }: SectionProps & { language: Language }) {
+  const [tab, setTab] = useState<'sessions' | 'members' | 'reports'>('sessions')
   const [members, setMembers] = useState<Member[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -433,9 +435,12 @@ function AdminAttendance({ tx, formatDateTime, headers, notify }: SectionProps) 
       <div className="mezmur-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'sessions'} className={tab === 'sessions' ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setTab('sessions')}><ClipboardCheck size={14} /> {tx('Sessions')}</button>
         <button type="button" role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setTab('members')}><Users size={14} /> {tx('Members')}{pending.length > 0 && <span className="mezmur-tab-count att-pending-count">{pending.length}</span>}</button>
+        <button type="button" role="tab" aria-selected={tab === 'reports'} className={tab === 'reports' ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setTab('reports')}><BarChart3 size={14} /> {tx('Reports')}</button>
       </div>
 
-      {tab === 'members' ? (
+      {tab === 'reports' ? (
+        <AttendanceReport tx={tx} language={language} headers={headers} notify={notify} />
+      ) : tab === 'members' ? (
         <div className="att-admin-grid">
           <section className="form-panel att-panel">
             <div className="panel-heading"><h2>{tx('Waiting for approval')}</h2><span className="panel-index">{pending.length}</span></div>

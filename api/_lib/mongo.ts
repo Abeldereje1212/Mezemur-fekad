@@ -133,7 +133,7 @@ async function attendanceDb() {
   return client.db(process.env.MONGODB_DB || 'birhane_hiwot')
 }
 
-export type MemberStatus = 'pending' | 'approved' | 'rejected'
+export type MemberStatus = 'pending' | 'approved' | 'rejected' | 'removed'
 
 export interface MemberRecord extends Document {
   telegramId: string

@@ -12,7 +12,8 @@ import {
   type AttendanceStatus,
   type MemberRecord,
 } from './_lib/mongo.js'
-import { constantTimeEqual, getTelegramUser, isAdmin, telegramAuthFailure } from './_lib/security.js'
+import { constantTimeEqual, getTelegramUser, isAdmin, signScopedToken, telegramAuthFailure, verifyScopedToken } from './_lib/security.js'
+import { buildXlsx } from './_lib/xlsx.js'
 
 // The check-in code changes every 30 seconds; the previous code is still accepted so a member
 // who scanned just before the switch is not rejected.
@@ -88,6 +89,152 @@ async function sessionDetail(session: AttendanceSessionRecord & { _id: ObjectId 
   }
 }
 
+// ---- Reports ----
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const EXPORT_LINK_TTL_SECONDS = 5 * 60
+
+interface ReportRange { from: string | null; to: string | null }
+
+function readRange(from: unknown, to: unknown): ReportRange | null {
+  const clean = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null)
+  const range = { from: clean(from), to: clean(to) }
+  if ((range.from && !DATE_PATTERN.test(range.from)) || (range.to && !DATE_PATTERN.test(range.to))) return null
+  if (range.from && range.to && range.from > range.to) return null
+  return range
+}
+
+// Share of sessions attended, ignoring excused ones; null when nothing counts yet.
+function attendanceRate(present: number, absent: number) {
+  return present + absent > 0 ? Math.round((present * 100) / (present + absent)) : null
+}
+
+async function buildReport(range: ReportRange) {
+  const dateFilter = range.from || range.to
+    ? { date: { ...(range.from ? { $gte: range.from } : {}), ...(range.to ? { $lte: range.to } : {}) } }
+    : {}
+  const sessions = await (await attendanceSessionsCollection()).find(dateFilter).sort({ startsAt: 1 }).limit(1000).toArray()
+  const sessionIds = sessions.map((s) => s._id.toString())
+  const records = sessionIds.length > 0
+    ? await (await attendanceRecordsCollection()).find({ sessionId: { $in: sessionIds } }).toArray()
+    : []
+  const recordedIds = [...new Set(records.map((r) => r.telegramId))]
+  const members = await (await membersCollection()).find({ $or: [{ status: 'approved' }, { telegramId: { $in: recordedIds } }] }).toArray()
+  const memberById = new Map(members.map((m) => [m.telegramId, m]))
+
+  const blank = () => ({ present: 0, absent: 0, excused: 0 })
+  const bySession = new Map(sessionIds.map((id) => [id, blank()]))
+  const byMember = new Map<string, Record<AttendanceStatus, number>>()
+  for (const record of records) {
+    bySession.get(record.sessionId)![record.status]++
+    const counts = byMember.get(record.telegramId) ?? blank()
+    counts[record.status]++
+    byMember.set(record.telegramId, counts)
+  }
+
+  const memberIds = [...new Set([...members.filter((m) => m.status === 'approved').map((m) => m.telegramId), ...recordedIds])]
+  const memberStats = memberIds.map((telegramId) => {
+    const member = memberById.get(telegramId)
+    const counts = byMember.get(telegramId) ?? blank()
+    return {
+      telegramId,
+      name: member?.name ?? 'Unknown member',
+      phone: member?.phone ?? '',
+      username: member?.username ?? '',
+      active: member?.status === 'approved',
+      ...counts,
+      rate: attendanceRate(counts.present, counts.absent),
+    }
+  }).sort((a, b) => a.name.localeCompare(b.name))
+
+  const sessionStats = sessions.map((s) => {
+    const counts = bySession.get(s._id.toString())!
+    return { ...publicSession(s), ...counts, rate: attendanceRate(counts.present, counts.absent) }
+  })
+
+  const totals = records.reduce((sum, r) => { sum[r.status]++; return sum }, blank())
+  return {
+    range,
+    totals: { sessions: sessions.length, ...totals, rate: attendanceRate(totals.present, totals.absent) },
+    sessions: sessionStats,
+    members: memberStats,
+    records,
+    memberById,
+  }
+}
+
+const exportLabels = {
+  en: {
+    members: 'Members', sessions: 'Sessions', details: 'Details',
+    name: 'Name', username: 'Username', phone: 'Phone', memberStatus: 'Member status', active: 'Active', removed: 'Removed',
+    present: 'Present', absent: 'Absent', excused: 'Excused', marked: 'Sessions marked', rate: 'Attendance %',
+    date: 'Date', time: 'Start time', session: 'Session', state: 'Status', open: 'Open', closed: 'Closed',
+    member: 'Member', how: 'How marked', checkIn: 'Marked at', code: 'QR / code', manual: 'Admin', auto: 'Automatic (on close)',
+  },
+  am: {
+    members: 'አባላት', sessions: 'ፕሮግራሞች', details: 'ዝርዝር',
+    name: 'ስም', username: 'የቴሌግራም ስም', phone: 'ስልክ', memberStatus: 'የአባል ሁኔታ', active: 'ንቁ', removed: 'የተወገደ',
+    present: 'ተገኝቷል', absent: 'ቀርቷል', excused: 'በፈቃድ', marked: 'የተመዘገቡ ፕሮግራሞች', rate: 'የመገኘት %',
+    date: 'ቀን', time: 'መጀመሪያ ሰዓት', session: 'ፕሮግራም', state: 'ሁኔታ', open: 'ክፍት', closed: 'ተዘግቷል',
+    member: 'አባል', how: 'የተመዘገበበት መንገድ', checkIn: 'የተመዘገበበት ሰዓት', code: 'QR / ኮድ', manual: 'አስተዳዳሪ', auto: 'በራስ ሰር (ሲዘጋ)',
+  },
+}
+
+function ethiopiaDateTime(iso: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Addis_Ababa', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date(iso))
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` }
+}
+
+async function buildReportWorkbook(range: ReportRange, language: 'en' | 'am') {
+  const L = exportLabels[language]
+  const report = await buildReport(range)
+  const statusLabel = (s: AttendanceStatus) => L[s]
+  const sessionById = new Map(report.sessions.map((s) => [s.id, s]))
+
+  const membersSheet = {
+    name: L.members,
+    widths: [26, 18, 16, 14, 10, 10, 10, 16, 14],
+    rows: [
+      [L.name, L.username, L.phone, L.memberStatus, L.present, L.absent, L.excused, L.marked, L.rate],
+      ...report.members.map((m) => [m.name, m.username, m.phone, m.active ? L.active : L.removed, m.present, m.absent, m.excused, m.present + m.absent + m.excused, m.rate]),
+    ],
+  }
+  const sessionsSheet = {
+    name: L.sessions,
+    widths: [12, 11, 30, 11, 10, 10, 10, 14],
+    rows: [
+      [L.date, L.time, L.session, L.state, L.present, L.absent, L.excused, L.rate],
+      ...report.sessions.map((s) => [s.date, ethiopiaDateTime(s.startsAt).time, s.title, s.status === 'open' ? L.open : L.closed, s.present, s.absent, s.excused, s.rate]),
+    ],
+  }
+  const detailRows = report.records
+    .map((r) => ({ r, s: sessionById.get(r.sessionId)!, m: report.memberById.get(r.telegramId) }))
+    .sort((a, b) => a.s.startsAt.localeCompare(b.s.startsAt) || (a.m?.name ?? '').localeCompare(b.m?.name ?? ''))
+    .map(({ r, s, m }) => {
+      const marked = ethiopiaDateTime(r.markedAt)
+      return [s.date, s.title, m?.name ?? 'Unknown member', m?.phone ?? '', statusLabel(r.status), L[r.method], `${marked.date} ${marked.time}`]
+    })
+  const detailsSheet = {
+    name: L.details,
+    widths: [12, 30, 26, 16, 12, 20, 18],
+    rows: [[L.date, L.session, L.member, L.phone, L.state, L.how, L.checkIn], ...detailRows],
+  }
+  return buildXlsx([membersSheet, sessionsSheet, detailsSheet])
+}
+
+function requestOrigin(request: VercelRequest) {
+  const header = (name: string) => {
+    const value = request.headers[name]
+    return (Array.isArray(value) ? value[0] : value)?.split(',')[0].trim()
+  }
+  const host = header('x-forwarded-host') ?? header('host') ?? 'localhost'
+  const proto = header('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
+  return `${proto}://${host}`
+}
+
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   try {
     const admin = isAdmin(request)
@@ -95,10 +242,33 @@ export default async function handler(request: VercelRequest, response: VercelRe
     if (request.method === 'GET') {
       const query = queryParams(request)
 
+      // Excel download via a short-lived signed link (works in Telegram's downloader, which sends no cookies).
+      if (query.get('view') === 'export') {
+        const payload = verifyScopedToken('attendance-export', query.get('token'))
+        if (!payload) return response.status(401).json({ error: 'This download link has expired. Export again.' })
+        const { from, to, lang } = JSON.parse(payload) as ReportRange & { lang: 'en' | 'am' }
+        const bytes = await buildReportWorkbook({ from, to }, lang === 'am' ? 'am' : 'en')
+        const fileName = `attendance_${from ?? 'start'}_${to ?? 'today'}.xlsx`
+        response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+        response.setHeader('Cache-Control', 'no-store')
+        response.statusCode = 200
+        response.end(Buffer.from(bytes))
+        return
+      }
+
+      if (query.get('view') === 'report') {
+        if (!admin) return response.status(401).json({ error: 'Admin sign-in is required.' })
+        const range = readRange(query.get('from'), query.get('to'))
+        if (!range) return response.status(400).json({ error: 'Please choose a valid date range.' })
+        const { records: _records, memberById: _memberById, ...report } = await buildReport(range)
+        return response.status(200).json(report)
+      }
+
       if (query.get('view') === 'admin') {
         if (!admin) return response.status(401).json({ error: 'Admin sign-in is required.' })
         const [members, sessions, records] = await Promise.all([
-          membersCollection().then((c) => c.find({ status: { $ne: 'rejected' } }).sort({ requestedAt: -1 }).toArray()),
+          membersCollection().then((c) => c.find({ status: { $in: ['pending', 'approved'] } }).sort({ requestedAt: -1 }).toArray()),
           attendanceSessionsCollection().then((c) => c.find({}).sort({ startsAt: -1 }).limit(50).toArray()),
           attendanceRecordsCollection().then((c) => c.aggregate<{ _id: { sessionId: string; status: AttendanceStatus }; count: number }>([
             { $group: { _id: { sessionId: '$sessionId', status: '$status' }, count: { $sum: 1 } } },
@@ -131,7 +301,9 @@ export default async function handler(request: VercelRequest, response: VercelRe
       }
       const member = await (await membersCollection()).findOne({ telegramId: telegramUser.id })
       if (!member || member.status !== 'approved') {
-        return response.status(200).json({ member: member ? publicMember(member) : null, openSessions: [], history: [] })
+        // A removed member can join again, so they see the join form like a newcomer.
+        const visible = member && member.status !== 'removed' ? publicMember(member) : null
+        return response.status(200).json({ member: visible, openSessions: [], history: [] })
       }
       const [openSessions, myRecords] = await Promise.all([
         attendanceSessionsCollection().then((c) => c.find({ status: 'open' }).sort({ startsAt: -1 }).toArray()),
@@ -241,10 +413,21 @@ export default async function handler(request: VercelRequest, response: VercelRe
     if (action === 'remove-member') {
       const { telegramId } = body
       if (typeof telegramId !== 'string') return response.status(400).json({ error: 'Member not found.' })
-      // Past attendance records are kept for reports; the member just leaves the roster.
-      const result = await (await membersCollection()).deleteOne({ telegramId })
-      if (result.deletedCount === 0) return response.status(404).json({ error: 'Member not found.' })
+      // Soft remove: they leave the roster, but their name stays on past attendance in reports.
+      const result = await (await membersCollection()).updateOne({ telegramId }, { $set: { status: 'removed', reviewedAt: new Date().toISOString() } })
+      if (result.matchedCount === 0) return response.status(404).json({ error: 'Member not found.' })
       return response.status(200).json({ ok: true })
+    }
+
+    if (action === 'export-link') {
+      const range = readRange(body.from, body.to)
+      if (!range) return response.status(400).json({ error: 'Please choose a valid date range.' })
+      const lang = body.lang === 'am' ? 'am' : 'en'
+      const token = signScopedToken('attendance-export', JSON.stringify({ ...range, lang }), EXPORT_LINK_TTL_SECONDS)
+      return response.status(200).json({
+        url: `${requestOrigin(request)}/api/attendance?view=export&token=${encodeURIComponent(token)}`,
+        fileName: `attendance_${range.from ?? 'start'}_${range.to ?? 'today'}.xlsx`,
+      })
     }
 
     if (action === 'create-session') {

@@ -128,3 +128,30 @@ export function telegramAuthFailure(request: VercelRequest) {
 export function constantTimeEqual(left: string, right: string) {
   return safeEqual(left, right)
 }
+
+// Short-lived signed tokens for links that are opened outside the admin's browser session,
+// e.g. a report download handed to Telegram's native downloader (which sends no cookies).
+export function signScopedToken(scope: string, payload: string, ttlSeconds: number) {
+  const secret = process.env.SESSION_SECRET
+  if (!secret || secret.length < 32) throw new Error('SESSION_SECRET must contain at least 32 characters')
+  const body = Buffer.from(JSON.stringify({ scope, payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds })).toString('base64url')
+  const signature = createHmac('sha256', secret).update(`scoped:${body}`).digest('base64url')
+  return `${body}.${signature}`
+}
+
+export function verifyScopedToken(scope: string, token: string | null | undefined): string | null {
+  const secret = process.env.SESSION_SECRET
+  if (!secret || !token) return null
+  const [body, signature, extra] = token.split('.')
+  if (!body || !signature || extra) return null
+  const expected = createHmac('sha256', secret).update(`scoped:${body}`).digest('base64url')
+  if (!safeEqual(signature, expected)) return null
+  try {
+    const data = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { scope?: string; payload?: string; exp?: number }
+    if (data.scope !== scope || typeof data.payload !== 'string' || typeof data.exp !== 'number') return null
+    if (data.exp <= Math.floor(Date.now() / 1000)) return null
+    return data.payload
+  } catch {
+    return null
+  }
+}
