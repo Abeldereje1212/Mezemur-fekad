@@ -669,7 +669,7 @@ td .status-badge { margin-top: 0; }
 }
 
 @media (max-width: 600px) {
-  .att-mark span { display: none; }
+  .att-mark { padding: 0 4px; gap: 3px; font-size: 9px; }
   .att-code { font-size: 28px; }
   .app-shell { display: block; }
   .sidebar { position: relative; inset: auto; width: 100%; height: auto; padding: 12px 15px 0; border-right: 0; border-bottom: 1px solid var(--line); }
@@ -740,7 +740,7 @@ td .status-badge { margin-top: 0; }
   .log-heading { padding: 16px 13px 13px; }
   .log-heading h2 { font-size: 18px; }
   .export-button { padding: 6px; font-size: 0; }
-  .export-button.seed-toggle { padding: 6px 9px; font-size: 9px; }
+  .export-button.seed-toggle,.log-heading .export-button { padding: 6px 9px; font-size: 9px; white-space: nowrap; }
   .seed-review { padding: 12px; }
   .seed-review-actions > button { flex: 1 1 auto; }
   .export-button svg { width: 16px; height: 16px; }
