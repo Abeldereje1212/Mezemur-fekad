@@ -555,6 +555,28 @@ td .status-badge { margin-top: 0; }
   font-weight: 600;
 }
 
+.notify-target-field { margin-bottom: 14px; }
+.notify-message-field { margin-top: 12px; }
+.notify-send-button { width: 100%; margin-top: 10px; }
+.nav-count-alert { background: #c4553f; color: #fff; }
+
+/* Member notifications inbox */
+.inbox-list { max-width: 760px; display: grid; gap: 10px; }
+.inbox-item { padding: 14px 16px; display: flex; gap: 12px; border: 1px solid var(--line); background: #fffefa; animation: enter .3s ease-out both; }
+.inbox-item.unread { border-left: 3px solid var(--green); background: #f6faf3; }
+.inbox-icon { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: #e8f0e6; color: var(--green); }
+.inbox-icon.personal { background: #f6f0e2; color: #997333; }
+.inbox-body { min-width: 0; flex: 1; }
+.inbox-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: #8a9187; font-size: 10px; }
+.inbox-kind { color: #6a736a; font-size: 9px; font-weight: 750; letter-spacing: .6px; text-transform: uppercase; }
+.inbox-new { padding: 2px 6px; border-radius: 8px; background: var(--green); color: #fff; font-size: 8px; font-weight: 750; text-transform: uppercase; }
+.inbox-meta time { margin-left: auto; }
+.inbox-body h2 { margin: 7px 0 4px; color: var(--ink); font: 600 14px/1.35 var(--sans); }
+.inbox-body p { margin: 6px 0 0; color: #3f4a41; font-size: 12.5px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inbox-empty { padding: 40px 16px; display: grid; justify-items: center; gap: 8px; border: 1px dashed #cdd7cb; color: #8a9187; }
+.inbox-empty p { margin: 0; font-size: 12px; }
+.inbox-footnote { margin: 14px 0 0; color: #969b92; font-size: 10px; }
+
 @keyframes enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 
@@ -669,6 +691,36 @@ td .status-badge { margin-top: 0; }
 }
 
 @media (max-width: 600px) {
+  /* Notifier on phones */
+  .notifier-heading .admin-count { display: none; }
+  .notifier-heading { min-height: 0; margin-bottom: 14px; }
+  .notifier-stats { margin-bottom: 14px; padding: 10px 4px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+  .notifier-stats > div { padding: 0 8px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 5px; border-right: 1px solid var(--line); }
+  .notifier-stats > div:last-child { border-right: 0; }
+  .notifier-stats span { font-size: 7px; }
+  .notifier-stats strong { font-size: 17px; }
+  .notifier-grid { gap: 14px; }
+  .composer-card, .subscribers-card, .history-card { padding: 15px 14px; }
+  .composer-card h2, .subscribers-card h2, .history-card h2 { margin-top: 6px; font-size: 16px; }
+  .segmented-btn { min-height: 38px; font-size: 11px; }
+  .template-chips { margin-inline: -14px; padding: 0 14px 2px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .template-chips-label { flex: 0 0 auto; }
+  .template-chip { min-height: 30px; flex: 0 0 auto; white-space: nowrap; font-size: 11px; }
+  .composer-card .field input, .composer-card .field select, .composer-card .field textarea { font-size: 16px; }
+  .telegram-preview { margin: 14px 0 12px; }
+  .notify-send-button { position: sticky; bottom: 10px; z-index: 2; min-height: 44px; font-size: 12px; box-shadow: 0 4px 14px rgba(39,55,45,.18); }
+  .subscribers-card { max-height: 60vh; }
+  .subscriber-row { gap: 10px; }
+  .subscriber-details strong { font-size: 12px; }
+  .subscriber-details span { font-size: 10px; }
+  .subscriber-action-btn { min-height: 32px; padding: 0 10px; font-size: 10px; }
+  .history-title { font-size: 11px; }
+  .history-time { font-size: 9px; white-space: nowrap; }
+  .history-header { gap: 8px; }
+  .history-snippet { font-size: 11px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .history-stats { font-size: 10px; }
+  .inbox-item { padding: 12px; gap: 10px; }
+
   .att-mark { padding: 0 4px; gap: 3px; font-size: 9px; }
   .att-code { font-size: 28px; }
   .app-shell { display: block; }

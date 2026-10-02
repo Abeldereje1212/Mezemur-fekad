@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
   ArrowRight,
   Bell,
+  BellRing,
   CalendarDays,
   Check,
   ClipboardCheck,
@@ -24,10 +25,11 @@ import {
   X,
 } from 'lucide-react'
 import Attendance from './Attendance'
+import Notifications, { type InboxNotification } from './Notifications'
 import './App.css'
 
 type RequestStatus = 'pending' | 'approved' | 'rejected'
-type AppView = 'requests' | 'admin' | 'notifier' | 'mezmur' | 'attendance'
+type AppView = 'requests' | 'admin' | 'notifier' | 'mezmur' | 'attendance' | 'notifications'
 type Language = 'en' | 'am'
 type PermissionType = 'Annual leave' | 'Sick leave' | 'Personal leave' | 'Late arrival' | 'Early departure' | 'Other'
 
@@ -103,6 +105,11 @@ declare global {
 
 const STORAGE_KEY = 'fekad-permission-requests'
 const LANGUAGE_KEY = 'fekad-language'
+const INBOX_SEEN_KEY = 'fekad-notifications-seen'
+
+function readInboxSeen() {
+  try { return localStorage.getItem(INBOX_SEEN_KEY) ?? '' } catch { return '' }
+}
 
 const permissionTypes: PermissionType[] = ['Annual leave', 'Sick leave', 'Personal leave', 'Late arrival', 'Early departure', 'Other']
 const today = new Date()
@@ -138,7 +145,7 @@ const translations: Record<Language, Record<string, string>> = {
     'Username or password is incorrect.': 'የተጠቃሚ ስም ወይም የይለፍ ቃል ትክክል አይደለም።', 'Sign in': 'ግባ',
     'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Reviewed': 'ተገምግሟል',
     'Open navigation menu': 'የአሰሳ ምናሌ ክፈት', 'Close navigation menu': 'የአሰሳ ምናሌ ዝጋ',
-    'Mezmur': 'መዝሙር', 'MEZMUR': 'መዝሙር', 'Attendance': 'ክትትል', 'ATTENDANCE': 'ክትትል', 'Keep song lyrics together in one place.': 'የመዝሙር ግጥሞችን በአንድ ቦታ ያስቀምጡ።',
+    'Mezmur': 'መዝሙር', 'MEZMUR': 'መዝሙር', 'Attendance': 'ክትትል', 'ATTENDANCE': 'ክትትል', 'Notifications': 'ማሳወቂያዎች', 'NOTIFICATIONS': 'ማሳወቂያዎች', 'Keep song lyrics together in one place.': 'የመዝሙር ግጥሞችን በአንድ ቦታ ያስቀምጡ።',
     'Add lyrics box': 'የግጥም ሳጥን ጨምር', 'Song title': 'የመዝሙሩ ርዕስ', 'Lyrics': 'ግጥም',
     'Write or paste the lyrics here...': 'ግጥሙን እዚህ ይጻፉ ወይም ይለጥፉ...', 'Remove lyrics box': 'የግጥም ሳጥን አስወግድ',
     'Permission approved.': 'ፈቃዱ ተፈቅዷል።', 'Permission rejected.': 'ፈቃዱ ውድቅ ተደርጓል።',
@@ -322,6 +329,13 @@ function App() {
   const [dateFilter, setDateFilter] = useState('')
   const [subscribers, setSubscribers] = useState<SubscriberUser[]>([])
   const [notificationHistory, setNotificationHistory] = useState<NotificationHistoryItem[]>([])
+  const [inbox, setInbox] = useState<InboxNotification[]>([])
+  const [inboxLoading, setInboxLoading] = useState(true)
+  // Latest sentAt the viewer has seen; newer items count as unread. Kept per device.
+  const [inboxSeen, setInboxSeen] = useState(readInboxSeen)
+  // Snapshot of inboxSeen taken when the page is opened, so new items stay highlighted while reading.
+  const [inboxSeenBefore, setInboxSeenBefore] = useState('')
+  const unreadCount = inbox.filter((item) => item.sentAt > inboxSeen).length
   const [totalSubscribers, setTotalSubscribers] = useState(0)
   const [notifyLoading, setNotifyLoading] = useState(false)
   const [notifySending, setNotifySending] = useState(false)
@@ -465,6 +479,39 @@ function App() {
     return () => { active = false }
   }, [adminAuthenticated, view])
 
+  const loadInbox = useCallback(async () => {
+    try {
+      const response = await fetch('/api/notifications', { headers: telegramHeaders(), cache: 'no-store' })
+      if (!response.ok) return
+      const result = await response.json() as { notifications: InboxNotification[] }
+      setInbox(result.notifications)
+    } catch {
+      // Keep the last loaded notifications; retry on the next poll.
+    } finally {
+      setInboxLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadInbox()
+    const interval = window.setInterval(() => { if (document.visibilityState === 'visible') void loadInbox() }, 60_000)
+    return () => window.clearInterval(interval)
+  }, [loadInbox])
+
+  // While the Notifications page is open, everything shown counts as read.
+  useEffect(() => {
+    if (view !== 'notifications' || inbox.length === 0) return
+    const newest = inbox[0].sentAt
+    if (newest <= inboxSeen) return
+    setInboxSeen(newest)
+    try { localStorage.setItem(INBOX_SEEN_KEY, newest) } catch { /* per-device convenience only */ }
+  }, [view, inbox, inboxSeen])
+
+  function openInbox() {
+    setInboxSeenBefore(inboxSeen)
+    setView('notifications')
+  }
+
   const todayLabel = new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', { weekday: 'short', day: 'numeric', month: 'short' }).format(today)
 
   useEffect(() => {
@@ -570,6 +617,7 @@ function App() {
       setNotifyTitle('')
       setNotifyMessage('')
       loadNotifierData()
+      void loadInbox()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to send'
       setToast(t(language, msg))
@@ -808,9 +856,13 @@ function App() {
             <ShieldCheck size={18} strokeWidth={1.8} /> {t(language, 'Admin review')}
             {pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}
           </button>
-          <button className={view === 'notifier' ? 'nav-item active' : 'nav-item'} onClick={openNotifier}>
+          {adminAuthenticated && <button className={view === 'notifier' ? 'nav-item active' : 'nav-item'} onClick={openNotifier}>
             <Bell size={18} strokeWidth={1.8} /> {t(language, 'Notifier')}
             {totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}
+          </button>}
+          <button className={view === 'notifications' ? 'nav-item active' : 'nav-item'} onClick={openInbox}>
+            <BellRing size={18} strokeWidth={1.8} /> {t(language, 'Notifications')}
+            {unreadCount > 0 && <span className="nav-count nav-count-alert">{unreadCount}</span>}
           </button>
           <button className={view === 'mezmur' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mezmur')}>
             <Music2 size={18} strokeWidth={1.8} /> {t(language, 'Mezmur')}
@@ -832,8 +884,8 @@ function App() {
       <main className="main-area">
         {requestError && <p className="login-error" role="alert">{t(language, requestError)}</p>}
         <header className="topbar">
-          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'notifier' ? 'NOTIFIER PANEL' : view === 'mezmur' ? 'MEZMUR' : view === 'attendance' ? 'ATTENDANCE' : 'PERMISSION DESK')}</strong></div>
-          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<img className="topbar-logo" src="/logo.jpg" alt="Birhane Hiwot" /><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button><button type="button" role="menuitem" className={view === 'notifier' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openNotifier(); setMenuOpen(false) }}><Bell size={17} />{t(language, 'Notifier')}{totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button><button type="button" role="menuitem" className={view === 'attendance' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('attendance'); setMenuOpen(false) }}><ClipboardCheck size={17} />{t(language, 'Attendance')}</button></nav>}</div></div>
+          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'notifier' ? 'NOTIFIER PANEL' : view === 'mezmur' ? 'MEZMUR' : view === 'attendance' ? 'ATTENDANCE' : view === 'notifications' ? 'NOTIFICATIONS' : 'PERMISSION DESK')}</strong></div>
+          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<img className="topbar-logo" src="/logo.jpg" alt="Birhane Hiwot" /><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button>{adminAuthenticated && <button type="button" role="menuitem" className={view === 'notifier' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openNotifier(); setMenuOpen(false) }}><Bell size={17} />{t(language, 'Notifier')}{totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}</button>}<button type="button" role="menuitem" className={view === 'notifications' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openInbox(); setMenuOpen(false) }}><BellRing size={17} />{t(language, 'Notifications')}{unreadCount > 0 && <span className="nav-count nav-count-alert">{unreadCount}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button><button type="button" role="menuitem" className={view === 'attendance' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('attendance'); setMenuOpen(false) }}><ClipboardCheck size={17} />{t(language, 'Attendance')}</button></nav>}</div></div>
         </header>
 
         {view === 'requests' ? (
@@ -980,21 +1032,11 @@ function App() {
                   </div>
 
                   {notifyTarget !== 'all' && (
-                    <label className="field" style={{ marginBottom: 14 }}>
+                    <label className="field notify-target-field">
                       <span>{t(language, 'Single user')}</span>
                       <select
                         value={notifyTarget}
                         onChange={(e) => setNotifyTarget(e.target.value)}
-                        style={{
-                          height: 38,
-                          padding: '0 10px',
-                          border: '1px solid #d4ded0',
-                          borderRadius: 3,
-                          background: 'white',
-                          color: '#344037',
-                          fontFamily: 'inherit',
-                          fontSize: 12,
-                        }}
                       >
                         {subscribers.map((u) => (
                           <option key={u.telegramId} value={u.telegramId}>
@@ -1062,7 +1104,7 @@ function App() {
                     />
                   </label>
 
-                  <label className="field" style={{ marginTop: 12 }}>
+                  <label className="field notify-message-field">
                     <span>{t(language, 'Write your message...')}</span>
                     <textarea
                       value={notifyMessage}
@@ -1093,8 +1135,7 @@ function App() {
 
                   <button
                     type="submit"
-                    className="submit-button"
-                    style={{ width: '100%', marginTop: 10 }}
+                    className="submit-button notify-send-button"
                     disabled={notifySending || !notifyMessage.trim()}
                   >
                     <Send size={15} />
@@ -1166,6 +1207,8 @@ function App() {
               </div>
             </div>
           </div>
+        ) : view === 'notifications' ? (
+          <Notifications language={language} items={inbox} loading={inboxLoading} seenBefore={inboxSeenBefore} />
         ) : view === 'attendance' ? (
           <Attendance language={language} isAdmin={adminAuthenticated} defaultName={initialName} headers={telegramHeaders} notify={setToast} />
         ) : (
