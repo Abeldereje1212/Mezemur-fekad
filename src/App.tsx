@@ -4,6 +4,7 @@ import {
   Bell,
   CalendarDays,
   Check,
+  ClipboardCheck,
   ChevronDown,
   Clock3,
   FileClock,
@@ -22,10 +23,11 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import Attendance from './Attendance'
 import './App.css'
 
 type RequestStatus = 'pending' | 'approved' | 'rejected'
-type AppView = 'requests' | 'admin' | 'notifier' | 'mezmur'
+type AppView = 'requests' | 'admin' | 'notifier' | 'mezmur' | 'attendance'
 type Language = 'en' | 'am'
 type PermissionType = 'Annual leave' | 'Sick leave' | 'Personal leave' | 'Late arrival' | 'Early departure' | 'Other'
 
@@ -136,7 +138,7 @@ const translations: Record<Language, Record<string, string>> = {
     'Username or password is incorrect.': 'የተጠቃሚ ስም ወይም የይለፍ ቃል ትክክል አይደለም።', 'Sign in': 'ግባ',
     'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Reviewed': 'ተገምግሟል',
     'Open navigation menu': 'የአሰሳ ምናሌ ክፈት', 'Close navigation menu': 'የአሰሳ ምናሌ ዝጋ',
-    'Mezmur': 'መዝሙር', 'MEZMUR': 'መዝሙር', 'Keep song lyrics together in one place.': 'የመዝሙር ግጥሞችን በአንድ ቦታ ያስቀምጡ።',
+    'Mezmur': 'መዝሙር', 'MEZMUR': 'መዝሙር', 'Attendance': 'ክትትል', 'ATTENDANCE': 'ክትትል', 'Keep song lyrics together in one place.': 'የመዝሙር ግጥሞችን በአንድ ቦታ ያስቀምጡ።',
     'Add lyrics box': 'የግጥም ሳጥን ጨምር', 'Song title': 'የመዝሙሩ ርዕስ', 'Lyrics': 'ግጥም',
     'Write or paste the lyrics here...': 'ግጥሙን እዚህ ይጻፉ ወይም ይለጥፉ...', 'Remove lyrics box': 'የግጥም ሳጥን አስወግድ',
     'Permission approved.': 'ፈቃዱ ተፈቅዷል።', 'Permission rejected.': 'ፈቃዱ ውድቅ ተደርጓል።',
@@ -813,6 +815,9 @@ function App() {
           <button className={view === 'mezmur' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mezmur')}>
             <Music2 size={18} strokeWidth={1.8} /> {t(language, 'Mezmur')}
           </button>
+          <button className={view === 'attendance' ? 'nav-item active' : 'nav-item'} onClick={() => setView('attendance')}>
+            <ClipboardCheck size={18} strokeWidth={1.8} /> {t(language, 'Attendance')}
+          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-note"><span className="online-dot" /> {t(language, 'Request desk is open')}</div>
@@ -827,7 +832,7 @@ function App() {
       <main className="main-area">
         {requestError && <p className="login-error" role="alert">{t(language, requestError)}</p>}
         <header className="topbar">
-          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'notifier' ? 'NOTIFIER PANEL' : view === 'mezmur' ? 'MEZMUR' : 'PERMISSION DESK')}</strong></div>
+          <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'notifier' ? 'NOTIFIER PANEL' : view === 'mezmur' ? 'MEZMUR' : view === 'attendance' ? 'ATTENDANCE' : 'PERMISSION DESK')}</strong></div>
           <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<img className="topbar-logo" src="/logo.jpg" alt="Birhane Hiwot" /><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button><button type="button" role="menuitem" className={view === 'notifier' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openNotifier(); setMenuOpen(false) }}><Bell size={17} />{t(language, 'Notifier')}{totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button></nav>}</div></div>
         </header>
 
@@ -1161,6 +1166,8 @@ function App() {
               </div>
             </div>
           </div>
+        ) : view === 'attendance' ? (
+          <Attendance language={language} isAdmin={adminAuthenticated} defaultName={initialName} headers={telegramHeaders} notify={setToast} />
         ) : (
           <div className="page-content mezmur-content">
             <section className="page-heading mezmur-heading">

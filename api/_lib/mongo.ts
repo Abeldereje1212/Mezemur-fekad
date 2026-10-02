@@ -124,3 +124,78 @@ export async function sentNotificationsCollection(): Promise<Collection<SentNoti
   await collection.createIndex({ sentAt: -1 })
   return collection
 }
+async function attendanceDb() {
+  const uri = process.env.MONGODB_URI
+  if (!uri) throw new Error('MONGODB_URI is not configured')
+
+  globalThis.permissionMongoClient ??= new MongoClient(uri).connect()
+  const client = await globalThis.permissionMongoClient
+  return client.db(process.env.MONGODB_DB || 'birhane_hiwot')
+}
+
+export type MemberStatus = 'pending' | 'approved' | 'rejected'
+
+export interface MemberRecord extends Document {
+  telegramId: string
+  name: string
+  phone: string
+  username?: string
+  status: MemberStatus
+  requestedAt: string
+  reviewedAt?: string
+}
+
+export async function membersCollection(): Promise<Collection<MemberRecord>> {
+  const collection = (await attendanceDb()).collection<MemberRecord>('members')
+  await collection.createIndex({ telegramId: 1 }, { unique: true })
+  return collection
+}
+
+export interface AttendanceSessionRecord extends Document {
+  title: string
+  startsAt: string
+  // Calendar date of the session in Ethiopia (YYYY-MM-DD), used to match permission requests.
+  date: string
+  status: 'open' | 'closed'
+  // Server-only key the rotating check-in code is derived from. Never sent to clients.
+  secret: string
+  createdAt: string
+  closedAt?: string
+}
+
+export async function attendanceSessionsCollection(): Promise<Collection<AttendanceSessionRecord>> {
+  const collection = (await attendanceDb()).collection<AttendanceSessionRecord>('attendance_sessions')
+  await collection.createIndex({ startsAt: -1 })
+  await collection.createIndex({ status: 1 })
+  return collection
+}
+
+export type AttendanceStatus = 'present' | 'absent' | 'excused'
+
+export interface AttendanceRecord extends Document {
+  sessionId: string
+  telegramId: string
+  status: AttendanceStatus
+  method: 'code' | 'manual' | 'auto'
+  markedAt: string
+}
+
+export async function attendanceRecordsCollection(): Promise<Collection<AttendanceRecord>> {
+  const collection = (await attendanceDb()).collection<AttendanceRecord>('attendance_records')
+  await collection.createIndex({ sessionId: 1, telegramId: 1 }, { unique: true })
+  await collection.createIndex({ telegramId: 1, markedAt: -1 })
+  return collection
+}
+
+// Failed check-in code attempts per member per session, to stop guessing the code.
+export interface CheckInAttemptRecord extends Document {
+  sessionId: string
+  telegramId: string
+  failures: number
+}
+
+export async function checkInAttemptsCollection(): Promise<Collection<CheckInAttemptRecord>> {
+  const collection = (await attendanceDb()).collection<CheckInAttemptRecord>('attendance_attempts')
+  await collection.createIndex({ sessionId: 1, telegramId: 1 }, { unique: true })
+  return collection
+}
