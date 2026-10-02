@@ -9,6 +9,26 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
 }
 
+interface SendResult {
+  ok: boolean
+  // The member can never receive messages again (blocked the bot, deleted account, chat gone).
+  unreachable: boolean
+  description?: string
+}
+
+async function sendTelegramMessage(botToken: string, chatId: string, text: string): Promise<SendResult> {
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+  })
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error_code?: number; description?: string }
+  if (data.ok) return { ok: true, unreachable: false }
+  const description = data.description ?? ''
+  const unreachable = data.error_code === 403 || /chat not found|user is deactivated/i.test(description)
+  return { ok: false, unreachable, description }
+}
+
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   if (!isAdmin(request)) {
     return response.status(401).json({ error: 'Admin sign-in is required.' })
@@ -63,28 +83,21 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
       let sentCount = 0
       let failedCount = 0
+      const unreachableIds: string[] = []
+      const visits = await userVisitsCollection()
 
       if (target === 'all') {
-        const visits = await userVisitsCollection()
         const users = await visits.find({}).toArray()
 
         for (const user of users) {
           if (!user.telegramId) continue
           try {
-            const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: user.telegramId,
-                text: formatted,
-                parse_mode: 'HTML',
-              }),
-            })
-            const data = (await res.json().catch(() => ({}))) as { ok?: boolean }
-            if (data.ok) {
+            const result = await sendTelegramMessage(botToken, user.telegramId, formatted)
+            if (result.ok) {
               sentCount++
             } else {
               failedCount++
+              if (result.unreachable) unreachableIds.push(user.telegramId)
             }
           } catch {
             failedCount++
@@ -92,27 +105,27 @@ export default async function handler(request: VercelRequest, response: VercelRe
         }
       } else {
         // Specific target chat_id
+        let result: SendResult
         try {
-          const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: target,
-              text: formatted,
-              parse_mode: 'HTML',
-            }),
-          })
-          const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string }
-          if (data.ok) {
-            sentCount = 1
-          } else {
-            failedCount = 1
-            return response.status(400).json({ error: data.description || 'Could not deliver message to this user.' })
-          }
+          result = await sendTelegramMessage(botToken, String(target), formatted)
         } catch {
           return response.status(500).json({ error: 'Failed to contact Telegram API.' })
         }
+        if (!result.ok) {
+          if (result.unreachable) {
+            await visits.deleteOne({ telegramId: String(target) })
+            return response.status(400).json({ error: 'This member blocked the bot or deleted their account, so they were removed from the list.', removedCount: 1 })
+          }
+          return response.status(400).json({ error: result.description || 'Could not deliver message to this user.' })
+        }
+        sentCount = 1
       }
+
+      // Members who blocked the bot will never receive messages again; drop them so they stop counting as failures.
+      // They are added back automatically if they open the Mini App again.
+      const removedCount = unreachableIds.length > 0
+        ? (await visits.deleteMany({ telegramId: { $in: unreachableIds } })).deletedCount
+        : 0
 
       // Record in sent notifications history
       const historyCol = await sentNotificationsCollection()
@@ -126,7 +139,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
         sentAt: new Date().toISOString(),
       })
 
-      return response.status(200).json({ ok: true, sentCount, failedCount })
+      return response.status(200).json({ ok: true, sentCount, failedCount, removedCount })
     }
 
     return response.status(405).json({ error: 'Method not allowed' })

@@ -168,6 +168,7 @@ const translations: Record<Language, Record<string, string>> = {
     'No songs waiting in this category.': 'በዚህ ምድብ የሚጠብቅ መዝሙር የለም።',
     'Could not update songbook songs.': 'የመዝሙር ጥራዝ መዝሙሮችን ማዘመን አልተቻለም።',
     'Please select at least one song.': 'እባክዎ ቢያንስ አንድ መዝሙር ይምረጡ።',
+    'This member blocked the bot or deleted their account, so they were removed from the list.': 'ይህ ሰው ቦቱን አግዷል ወይም አካውንቱን አጥፍቷል፤ ስለዚህ ከዝርዝሩ ተወግዷል።',
     'Notifier': 'የማሳወቂያ ክፍል',
     'NOTIFIER PANEL': 'የማሳወቂያ ክፍል',
     'Telegram notifier': 'የቴሌግራም መልእክት ማስተላለፊያ',
@@ -546,12 +547,23 @@ function App() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to send notification.')
+      if (!res.ok) {
+        if (data.removedCount) {
+          setNotifyTarget('all')
+          loadNotifierData()
+        }
+        throw new Error(data.error || 'Failed to send notification.')
+      }
 
+      const removedNote = data.removedCount > 0
+        ? (language === 'am'
+          ? ` ቦቱን ያገዱ ${data.removedCount} ሰዎች ከዝርዝሩ ተወግደዋል።`
+          : ` ${data.removedCount} member(s) who blocked the bot were removed from the list.`)
+        : ''
       setToast(
-        language === 'am'
+        (language === 'am'
           ? `መልእክቱ ለ ${data.sentCount} ሰው በተሳካ ሁኔታ ተልኳል!`
-          : `Notification delivered to ${data.sentCount} recipient(s)!`
+          : `Notification delivered to ${data.sentCount} recipient(s)!`) + removedNote
       )
       setNotifyTitle('')
       setNotifyMessage('')
