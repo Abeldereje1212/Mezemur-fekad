@@ -54,7 +54,7 @@ async function notifyAdminsOfNewRequest(record: PermissionRecord) {
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   try {
     if (request.method === 'GET') {
-      if (isAdmin(request)) {
+      if (await isAdmin(request)) {
         const collection = await permissionRequests()
         const records = await collection.find({}).sort({ submittedAt: -1 }).limit(500).toArray()
         return response.status(200).json({ role: 'admin', requests: records.map(toPermissionRequest) })
@@ -130,7 +130,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     }
 
     if (request.method === 'PATCH') {
-      if (!isAdmin(request)) return response.status(401).json({ error: 'Admin sign-in is required.' })
+      if (!(await isAdmin(request))) return response.status(401).json({ error: 'Admin sign-in is required.' })
       const { id, status } = request.body ?? {}
       if (typeof id !== 'string' || !ObjectId.isValid(id) || (status !== 'approved' && status !== 'rejected')) {
         return response.status(400).json({ error: 'Invalid request decision.' })

@@ -29,7 +29,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
       // GET ?seed=pending — admin only, songbook songs waiting for approval
       const query = new URL(request.url ?? '/', 'http://localhost').searchParams
       if (query.get('seed') === 'pending') {
-        if (!isAdmin(request)) return response.status(401).json({ error: 'Admin sign-in is required.' })
+        if (!(await isAdmin(request))) return response.status(401).json({ error: 'Admin sign-in is required.' })
         return response.status(200).json({ pending: await pendingSeedSongs() })
       }
 
@@ -41,7 +41,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
     // POST — admin only, add a new lyrics box, or approve/reject songbook songs
     if (request.method === 'POST') {
-      if (!isAdmin(request)) return response.status(401).json({ error: 'Admin sign-in is required.' })
+      if (!(await isAdmin(request))) return response.status(401).json({ error: 'Admin sign-in is required.' })
 
       const { action } = request.body ?? {}
       if (action === 'approve-seed' || action === 'reject-seed') {
@@ -93,7 +93,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
     // PUT — admin only, update an existing lyrics box
     if (request.method === 'PUT') {
-      if (!isAdmin(request)) return response.status(401).json({ error: 'Admin sign-in is required.' })
+      if (!(await isAdmin(request))) return response.status(401).json({ error: 'Admin sign-in is required.' })
 
       const { id, title, lyrics, category } = request.body ?? {}
       if (typeof id !== 'string' || !ObjectId.isValid(id)) {
@@ -128,7 +128,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
     // DELETE — admin only, remove a lyrics box
     if (request.method === 'DELETE') {
-      if (!isAdmin(request)) return response.status(401).json({ error: 'Admin sign-in is required.' })
+      if (!(await isAdmin(request))) return response.status(401).json({ error: 'Admin sign-in is required.' })
 
       const { id } = request.body ?? {}
       if (typeof id !== 'string' || !ObjectId.isValid(id)) {

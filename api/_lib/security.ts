@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { VercelRequest, VercelResponse } from './http.js'
+import { findAdmin, type AdminIdentity } from './admin-accounts.js'
 
 const SESSION_COOKIE = 'bh_admin_session'
 const SESSION_DURATION_SECONDS = 60 * 60 * 12
@@ -16,27 +17,36 @@ function cookieValue(request: VercelRequest, name: string) {
   return cookie?.slice(name.length + 1)
 }
 
-export function isAdmin(request: VercelRequest) {
+// Session cookie: <base64url username>.<session version>.<expires>.<signature>.
+// The account is looked up on every check, so removing an admin or changing a password ends their sessions.
+export async function adminSession(request: VercelRequest): Promise<AdminIdentity | null> {
   const secret = process.env.SESSION_SECRET
   const token = cookieValue(request, SESSION_COOKIE)
-  if (!secret || !token) return false
+  if (!secret || !token) return null
 
-  const [expiresText, signature, extra] = token.split('.')
-  if (!expiresText || !signature || extra) return false
+  const [userPart, versionText, expiresText, signature, extra] = token.split('.')
+  if (!userPart || !versionText || !expiresText || !signature || extra) return null
   const expires = Number(expiresText)
-  if (!Number.isSafeInteger(expires) || expires <= Math.floor(Date.now() / 1000)) return false
-  const expected = createHmac('sha256', secret).update(expiresText).digest('base64url')
-  return safeEqual(signature, expected)
+  if (!Number.isSafeInteger(expires) || expires <= Math.floor(Date.now() / 1000)) return null
+  const expected = createHmac('sha256', secret).update(`${userPart}.${versionText}.${expiresText}`).digest('base64url')
+  if (!safeEqual(signature, expected)) return null
+
+  const admin = await findAdmin(Buffer.from(userPart, 'base64url').toString('utf8'))
+  return admin && String(admin.sessionVersion) === versionText ? admin : null
 }
 
-export function issueAdminSession(response: VercelResponse) {
+export async function isAdmin(request: VercelRequest) {
+  return (await adminSession(request)) !== null
+}
+
+export function issueAdminSession(response: VercelResponse, admin: AdminIdentity) {
   const secret = process.env.SESSION_SECRET
   if (!secret || secret.length < 32) throw new Error('SESSION_SECRET must contain at least 32 characters')
   const expires = Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS
-  const expiresText = String(expires)
-  const signature = createHmac('sha256', secret).update(expiresText).digest('base64url')
+  const payload = `${Buffer.from(admin.username).toString('base64url')}.${admin.sessionVersion}.${expires}`
+  const signature = createHmac('sha256', secret).update(payload).digest('base64url')
   const secure = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' ? '; Secure' : ''
-  response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${expiresText}.${signature}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_SECONDS}${secure}`)
+  response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${payload}.${signature}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_SECONDS}${secure}`)
 }
 
 export function clearAdminSession(response: VercelResponse) {

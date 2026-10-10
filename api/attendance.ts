@@ -237,7 +237,7 @@ function requestOrigin(request: VercelRequest) {
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   try {
-    const admin = isAdmin(request)
+    const admin = await isAdmin(request)
 
     if (request.method === 'GET') {
       const query = queryParams(request)

@@ -30,7 +30,7 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
 }
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request))) {
     return response.status(401).json({ error: 'Admin sign-in is required.' })
   }
 
