@@ -124,6 +124,25 @@ export async function sentNotificationsCollection(): Promise<Collection<SentNoti
   await collection.createIndex({ sentAt: -1 })
   return collection
 }
+export interface FeedbackRecord extends Document {
+  message: string
+  anonymous: boolean
+  name?: string
+  username?: string
+  telegramId?: string
+  clientId?: string
+  read: boolean
+  submittedAt: string
+}
+
+export async function feedbackCollection(): Promise<Collection<FeedbackRecord>> {
+  const collection = (await attendanceDb()).collection<FeedbackRecord>('feedback')
+  await collection.createIndex({ submittedAt: -1 })
+  await collection.createIndex({ telegramId: 1, submittedAt: -1 })
+  await collection.createIndex({ clientId: 1, submittedAt: -1 })
+  return collection
+}
+
 async function attendanceDb() {
   const uri = process.env.MONGODB_URI
   if (!uri) throw new Error('MONGODB_URI is not configured')
