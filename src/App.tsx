@@ -315,6 +315,10 @@ function App() {
   const [view, setView] = useState<AppView>('requests')
   const [menuOpen, setMenuOpen] = useState(false)
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
+  // 'owner' is the main admin (ADMIN_USERNAME); only they can read feedback.
+  const [adminRole, setAdminRole] = useState<'owner' | 'admin' | null>(null)
+  const isMainAdmin = adminAuthenticated && adminRole === 'owner'
+  const showFeedback = !adminAuthenticated || isMainAdmin
   const [showAdminLogin, setShowAdminLogin] = useState(false)
   const [adminUsername, setAdminUsername] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
@@ -482,6 +486,19 @@ function App() {
       .catch(() => { /* banner simply stays hidden */ })
     return () => { active = false }
   }, [adminAuthenticated, view])
+
+  useEffect(() => {
+    if (!adminAuthenticated) { setAdminRole(null); return }
+    let active = true
+    fetch('/api/admin/accounts', { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) return
+        const result = await response.json() as { me: { role: 'owner' | 'admin' } }
+        if (active) setAdminRole(result.me.role)
+      })
+      .catch(() => { /* feedback stays hidden until the role is known */ })
+    return () => { active = false }
+  }, [adminAuthenticated])
 
   const loadInbox = useCallback(async () => {
     try {
@@ -859,9 +876,9 @@ function App() {
           <button className={view === 'attendance' ? 'nav-item active' : 'nav-item'} onClick={() => setView('attendance')}>
             <ClipboardCheck size={18} strokeWidth={1.8} /> {t(language, 'Attendance')}
           </button>
-          <button className={view === 'feedback' ? 'nav-item active' : 'nav-item'} onClick={() => setView('feedback')}>
+          {showFeedback && <button className={view === 'feedback' ? 'nav-item active' : 'nav-item'} onClick={() => setView('feedback')}>
             <MessageSquareText size={18} strokeWidth={1.8} /> {t(language, 'Feedback')}
-          </button>
+          </button>}
           <button className={view === 'admin' ? 'nav-item active' : 'nav-item'} onClick={openAdmin}>
             <ShieldCheck size={18} strokeWidth={1.8} /> {t(language, 'Admin review')}
             {pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}
@@ -895,7 +912,7 @@ function App() {
         {requestError && <p className="login-error" role="alert">{t(language, requestError)}</p>}
         <header className="topbar">
           <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'notifier' ? 'NOTIFIER PANEL' : view === 'mezmur' ? 'MEZMUR' : view === 'attendance' ? 'ATTENDANCE' : view === 'notifications' ? 'NOTIFICATIONS' : view === 'accounts' ? 'ADMIN ACCOUNTS' : view === 'feedback' ? 'FEEDBACK' : 'PERMISSION DESK')}</strong></div>
-          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<img className="topbar-logo" src="/logo.jpg" alt="Birhane Hiwot" /><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'attendance' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('attendance'); setMenuOpen(false) }}><ClipboardCheck size={17} />{t(language, 'Attendance')}</button><button type="button" role="menuitem" className={view === 'feedback' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('feedback'); setMenuOpen(false) }}><MessageSquareText size={17} />{t(language, 'Feedback')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button>{adminAuthenticated && <button type="button" role="menuitem" className={view === 'notifier' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openNotifier(); setMenuOpen(false) }}><Bell size={17} />{t(language, 'Notifier')}{totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}</button>}{adminAuthenticated && <button type="button" role="menuitem" className={view === 'accounts' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('accounts'); setMenuOpen(false) }}><KeyRound size={17} />{t(language, 'Admin accounts')}</button>}<button type="button" role="menuitem" className={view === 'notifications' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openInbox(); setMenuOpen(false) }}><BellRing size={17} />{t(language, 'Notifications')}{unreadCount > 0 && <span className="nav-count nav-count-alert">{unreadCount}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button></nav>}</div></div>
+          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<img className="topbar-logo" src="/logo.jpg" alt="Birhane Hiwot" /><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'attendance' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('attendance'); setMenuOpen(false) }}><ClipboardCheck size={17} />{t(language, 'Attendance')}</button>{showFeedback && <button type="button" role="menuitem" className={view === 'feedback' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('feedback'); setMenuOpen(false) }}><MessageSquareText size={17} />{t(language, 'Feedback')}</button>}<button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button>{adminAuthenticated && <button type="button" role="menuitem" className={view === 'notifier' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openNotifier(); setMenuOpen(false) }}><Bell size={17} />{t(language, 'Notifier')}{totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}</button>}{adminAuthenticated && <button type="button" role="menuitem" className={view === 'accounts' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('accounts'); setMenuOpen(false) }}><KeyRound size={17} />{t(language, 'Admin accounts')}</button>}<button type="button" role="menuitem" className={view === 'notifications' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openInbox(); setMenuOpen(false) }}><BellRing size={17} />{t(language, 'Notifications')}{unreadCount > 0 && <span className="nav-count nav-count-alert">{unreadCount}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button></nav>}</div></div>
         </header>
 
         {(view === 'requests' || view === 'attendance' || view === 'feedback') && (
@@ -906,9 +923,9 @@ function App() {
             <button type="button" role="tab" aria-selected={view === 'attendance'} className={view === 'attendance' ? 'front-tab active' : 'front-tab'} onClick={() => setView('attendance')}>
               <ClipboardCheck size={16} strokeWidth={1.8} /> {t(language, 'Attendance')}
             </button>
-            <button type="button" role="tab" aria-selected={view === 'feedback'} className={view === 'feedback' ? 'front-tab active' : 'front-tab'} onClick={() => setView('feedback')}>
+            {showFeedback && <button type="button" role="tab" aria-selected={view === 'feedback'} className={view === 'feedback' ? 'front-tab active' : 'front-tab'} onClick={() => setView('feedback')}>
               <MessageSquareText size={16} strokeWidth={1.8} /> {t(language, 'Feedback')}
-            </button>
+            </button>}
           </div>
         )}
 
@@ -1235,8 +1252,8 @@ function App() {
           <Notifications language={language} items={inbox} loading={inboxLoading} seenBefore={inboxSeenBefore} />
         ) : view === 'accounts' && adminAuthenticated ? (
           <AdminAccounts language={language} notify={setToast} />
-        ) : view === 'feedback' ? (
-          <Feedback language={language} isAdmin={adminAuthenticated} defaultName={initialName} headers={telegramHeaders} notify={setToast} />
+        ) : view === 'feedback' && showFeedback ? (
+          <Feedback language={language} isAdmin={isMainAdmin} defaultName={initialName} headers={telegramHeaders} notify={setToast} />
         ) : view === 'attendance' ? (
           <Attendance language={language} isAdmin={adminAuthenticated} defaultName={initialName} headers={telegramHeaders} notify={setToast} />
         ) : (

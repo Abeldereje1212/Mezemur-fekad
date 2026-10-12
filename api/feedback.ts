@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb'
 import type { VercelRequest, VercelResponse } from './_lib/http.js'
 import { feedbackCollection } from './_lib/mongo.js'
-import { getTelegramUser, isAdmin } from './_lib/security.js'
+import { adminSession, getTelegramUser } from './_lib/security.js'
 
 const MAX_MESSAGE_LENGTH = 2000
 const SUBMIT_COOLDOWN_MS = 30_000
@@ -13,13 +13,13 @@ function clientId(request: VercelRequest) {
 }
 
 // Member feedback box.
-// GET: admins get every message; members get only what they sent.
+// GET: the main admin gets every message; everyone else gets only what they sent.
 // POST: anyone sends feedback (optionally anonymous).
-// PATCH { id, read } and DELETE { id }: admin only.
+// PATCH { id, read } and DELETE { id }: main admin only.
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   try {
     const collection = await feedbackCollection()
-    const admin = await isAdmin(request)
+    const admin = (await adminSession(request))?.role === 'owner'
 
     if (request.method === 'GET') {
       if (admin) {
@@ -79,7 +79,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
       })
     }
 
-    if (!admin) return response.status(401).json({ error: 'Admin sign-in is required.' })
+    if (!admin) return response.status(403).json({ error: 'Only the main admin can manage feedback.' })
     const id = typeof body.id === 'string' && ObjectId.isValid(body.id) ? new ObjectId(body.id) : null
     if (!id) return response.status(400).json({ error: 'Feedback not found.' })
 
