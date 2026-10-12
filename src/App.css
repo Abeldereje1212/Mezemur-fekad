@@ -81,6 +81,15 @@
 .feedback-anon { display: flex; align-items: flex-start; gap: 8px; color: #515c53; font-size: 11px; font-weight: 600; cursor: pointer; }
 .feedback-anon input { margin-top: 2px; accent-color: var(--green); }
 .feedback-anon small { display: block; margin-top: 3px; color: var(--muted); font-weight: 400; }
+.period-row { padding: 0 0 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.period-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.period-chip { min-height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #dfe4d9; border-radius: 15px; background: #fffefa; color: #59665c; font: 650 11px var(--sans); cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.period-chip:hover { border-color: #9fb69d; color: var(--ink); }
+.period-chip.active { border-color: var(--green); background: var(--green); color: #fff; }
+.period-chip small { font-weight: 500; opacity: .85; }
+.calendar-switch { display: inline-flex; padding: 2px; border: 1px solid #dfe4d9; border-radius: 4px; background: #f4f5ef; }
+.calendar-switch button { min-height: 26px; padding: 0 10px; border: 0; border-radius: 3px; background: transparent; color: #6b746c; font: 650 10px var(--sans); cursor: pointer; }
+.calendar-switch button.active { background: #fffefa; color: var(--green); box-shadow: 0 1px 2px rgba(34,49,37,.12); }
 .page-content { max-width: 1330px; margin: 0 auto; padding: 48px 48px 60px; animation: enter .45s ease-out both; }
 .page-heading { min-height: 105px; display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
 .eyebrow { color: #798278; font-size: 9px; line-height: 1.3; font-weight: 750; letter-spacing: 1.3px; }
@@ -813,8 +822,8 @@ td .status-badge { margin-top: 0; }
   .menu-wrap { position: fixed; top: 7px; right: 14px; z-index: 12; }
   .topbar-date { font-size: 9px; }
   .topbar-avatar { display: none; }
-  .front-tabs { padding: 0 12px; }
-  .front-tab { flex: 1; justify-content: center; min-height: 44px; padding: 0 8px; font-size: 12px; }
+  .front-tabs { padding: 0 12px; overflow-x: auto; scrollbar-width: none; }
+  .front-tab { flex: 1 0 auto; justify-content: center; min-height: 44px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
   .page-content { padding: 27px 17px 75px; }
   .page-heading { min-height: 85px; align-items: flex-start; }
   .page-heading h1 { margin-top: 8px; font-size: 29px; }

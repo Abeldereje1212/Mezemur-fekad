@@ -140,7 +140,7 @@ const translations: Record<Language, Record<string, string>> = {
     'pending': 'በመጠባበቅ ላይ', 'ALL REQUESTS': 'ሁሉም ጥያቄዎች', 'REJECTED': 'ውድቅ የተደረጉ', 'OPEN': 'ክፍት',
     'INBOX': 'ጥያቄዎች', 'All permissions': 'ሁሉም ፈቃዶች', 'Clear filters': 'ማጣሪያዎችን አጽዳ',
     'Search name or Telegram username': 'በስም ወይም በቴሌግራም ስም ፈልግ', 'Filter by name or Telegram username': 'በስም ወይም በቴሌግራም ስም አጣራ',
-    'Filter by date': 'በቀን አጣራ', 'FILTER REQUESTS': 'ጥያቄዎችን አጣራ', 'REQUESTER': 'ጠያቂ', 'PERMISSION': 'ፈቃድ',
+    'Filter by date': 'በቀን አጣራ', 'Filter by period': 'በጊዜ አጣራ', 'This week': 'በዚህ ሳምንት', 'This month': 'በዚህ ወር', 'This year': 'በዚህ ዓመት', 'Calendar': 'የቀን አቆጣጠር', 'Gregorian': 'የፈረንጅ', 'Ethiopian': 'የኢትዮጵያ', 'FILTER REQUESTS': 'ጥያቄዎችን አጣራ', 'REQUESTER': 'ጠያቂ', 'PERMISSION': 'ፈቃድ',
     'DATE NEEDED': 'ቀን', 'PHONE': 'ስልክ', 'REASON': 'ምክንያት', 'STATUS': 'ሁኔታ', 'REVIEW': 'ውሳኔ',
     'No requests found': 'ምንም ጥያቄ አልተገኘም', 'Try a different name, username, or date.': 'ሌላ ስም ወይም ቀን ይሞክሩ።',
     'Up to date': 'የተዘመነ', 'Decisions update the request status immediately for the person who submitted it.': 'ውሳኔው የጥያቄውን ሁኔታ ወዲያውኑ ያዘምናል።',
@@ -231,6 +231,62 @@ function localDate(offset = 0) {
   const date = new Date()
   date.setDate(date.getDate() + offset)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+type PeriodFilter = 'all' | 'week' | 'month' | 'year'
+type CalendarKind = 'gregorian' | 'ethiopian'
+const CALENDAR_KEY = 'fekad-log-calendar'
+
+const ethiopianMonths: Record<Language, string[]> = {
+  en: ['Meskerem', 'Tikimt', 'Hidar', 'Tahsas', 'Tir', 'Yekatit', 'Megabit', 'Miyazya', 'Ginbot', 'Sene', 'Hamle', 'Nehase', 'Pagume'],
+  am: ['መስከረም', 'ጥቅምት', 'ኅዳር', 'ታኅሣሥ', 'ጥር', 'የካቲት', 'መጋቢት', 'ሚያዝያ', 'ግንቦት', 'ሰኔ', 'ሐምሌ', 'ነሐሴ', 'ጳጉሜ'],
+}
+
+// Converts a YYYY-MM-DD Gregorian date to the Ethiopian calendar via the Julian day number.
+function toEthiopian(value: string) {
+  const [y, m, d] = value.split('-').map(Number)
+  const a = Math.floor((14 - m) / 12)
+  const yy = y + 4800 - a
+  const mm = m + 12 * a - 3
+  const jdn = d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045
+  const days = jdn - 1723856
+  const r = ((days % 1461) + 1461) % 1461
+  const n = (r % 365) + 365 * Math.floor(r / 1460)
+  return { year: 4 * Math.floor(days / 1461) + Math.floor(r / 365) - Math.floor(r / 1460), month: Math.floor(n / 30) + 1, day: (n % 30) + 1 }
+}
+
+// Monday of the week containing a YYYY-MM-DD date. Weeks are the same in both calendars.
+function weekStart(value: string) {
+  const date = new Date(`${value}T00:00:00`)
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function inPeriod(value: string, period: PeriodFilter, calendar: CalendarKind) {
+  if (period === 'all') return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const todayValue = localDate()
+  if (period === 'week') return weekStart(value) === weekStart(todayValue)
+  if (calendar === 'gregorian') {
+    const length = period === 'month' ? 7 : 4
+    return value.slice(0, length) === todayValue.slice(0, length)
+  }
+  const date = toEthiopian(value)
+  const now = toEthiopian(todayValue)
+  return date.year === now.year && (period === 'year' || date.month === now.month)
+}
+
+function periodLabel(period: PeriodFilter, calendar: CalendarKind, language: Language) {
+  const todayValue = localDate()
+  if (period === 'month') {
+    if (calendar === 'ethiopian') {
+      const now = toEthiopian(todayValue)
+      return `${ethiopianMonths[language][now.month - 1]} ${now.year}`
+    }
+    return new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', { month: 'long', year: 'numeric' }).format(new Date(`${todayValue}T00:00:00`))
+  }
+  if (period === 'year') return String(calendar === 'ethiopian' ? toEthiopian(todayValue).year : Number(todayValue.slice(0, 4)))
+  return ''
 }
 
 const sampleRequests: PermissionRequest[] = [
@@ -335,6 +391,10 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all')
+  const [logCalendar, setLogCalendar] = useState<CalendarKind>(() => {
+    try { return localStorage.getItem(CALENDAR_KEY) === 'ethiopian' ? 'ethiopian' : 'gregorian' } catch { return 'gregorian' }
+  })
   const [subscribers, setSubscribers] = useState<SubscriberUser[]>([])
   const [notificationHistory, setNotificationHistory] = useState<NotificationHistoryItem[]>([])
   const [inbox, setInbox] = useState<InboxNotification[]>([])
@@ -547,7 +607,7 @@ function App() {
   const filteredRequests = requests.filter((request) => {
     const query = search.trim().toLowerCase()
     const matchesSearch = !query || request.name.toLowerCase().includes(query) || request.username.toLowerCase().includes(query)
-    return matchesSearch && (!dateFilter || request.date === dateFilter)
+    return matchesSearch && (!dateFilter || request.date === dateFilter) && inPeriod(request.date, periodFilter, logCalendar)
   })
 
   const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -558,6 +618,16 @@ function App() {
     const age = Date.now() - submittedTime
     return age <= ONE_WEEK_MS || request.status === 'pending' || request.date >= localDate(0)
   })
+
+  function choosePeriod(period: PeriodFilter) {
+    setPeriodFilter(period)
+    if (period !== 'all') setDateFilter('')
+  }
+
+  function chooseCalendar(calendar: CalendarKind) {
+    setLogCalendar(calendar)
+    try { localStorage.setItem(CALENDAR_KEY, calendar) } catch { /* per-device convenience only */ }
+  }
 
   function openAdmin() {
     if (adminAuthenticated) {
@@ -879,6 +949,9 @@ function App() {
           {showFeedback && <button className={view === 'feedback' ? 'nav-item active' : 'nav-item'} onClick={() => setView('feedback')}>
             <MessageSquareText size={18} strokeWidth={1.8} /> {t(language, 'Feedback')}
           </button>}
+          <button className={view === 'mezmur' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mezmur')}>
+            <Music2 size={18} strokeWidth={1.8} /> {t(language, 'Mezmur')}
+          </button>
           <button className={view === 'admin' ? 'nav-item active' : 'nav-item'} onClick={openAdmin}>
             <ShieldCheck size={18} strokeWidth={1.8} /> {t(language, 'Admin review')}
             {pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}
@@ -893,9 +966,6 @@ function App() {
           <button className={view === 'notifications' ? 'nav-item active' : 'nav-item'} onClick={openInbox}>
             <BellRing size={18} strokeWidth={1.8} /> {t(language, 'Notifications')}
             {unreadCount > 0 && <span className="nav-count nav-count-alert">{unreadCount}</span>}
-          </button>
-          <button className={view === 'mezmur' ? 'nav-item active' : 'nav-item'} onClick={() => setView('mezmur')}>
-            <Music2 size={18} strokeWidth={1.8} /> {t(language, 'Mezmur')}
           </button>
         </nav>
         <div className="sidebar-bottom">
@@ -912,10 +982,10 @@ function App() {
         {requestError && <p className="login-error" role="alert">{t(language, requestError)}</p>}
         <header className="topbar">
           <div className="breadcrumb"><span>BIRHANE HIWOT</span><span className="crumb-slash">/</span><strong>{t(language, view === 'admin' ? 'ADMIN REVIEW' : view === 'notifier' ? 'NOTIFIER PANEL' : view === 'mezmur' ? 'MEZMUR' : view === 'attendance' ? 'ATTENDANCE' : view === 'notifications' ? 'NOTIFICATIONS' : view === 'accounts' ? 'ADMIN ACCOUNTS' : view === 'feedback' ? 'FEEDBACK' : 'PERMISSION DESK')}</strong></div>
-          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<img className="topbar-logo" src="/logo.jpg" alt="Birhane Hiwot" /><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'attendance' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('attendance'); setMenuOpen(false) }}><ClipboardCheck size={17} />{t(language, 'Attendance')}</button>{showFeedback && <button type="button" role="menuitem" className={view === 'feedback' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('feedback'); setMenuOpen(false) }}><MessageSquareText size={17} />{t(language, 'Feedback')}</button>}<button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button>{adminAuthenticated && <button type="button" role="menuitem" className={view === 'notifier' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openNotifier(); setMenuOpen(false) }}><Bell size={17} />{t(language, 'Notifier')}{totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}</button>}{adminAuthenticated && <button type="button" role="menuitem" className={view === 'accounts' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('accounts'); setMenuOpen(false) }}><KeyRound size={17} />{t(language, 'Admin accounts')}</button>}<button type="button" role="menuitem" className={view === 'notifications' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openInbox(); setMenuOpen(false) }}><BellRing size={17} />{t(language, 'Notifications')}{unreadCount > 0 && <span className="nav-count nav-count-alert">{unreadCount}</span>}</button><button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button></nav>}</div></div>
+          <div className="topbar-right"><button type="button" className="language-toggle" onClick={() => setLanguage((current) => current === 'en' ? 'am' : 'en')} aria-label={language === 'en' ? 'Switch language to Amharic' : 'Switch language to English'} title={language === 'en' ? 'አማርኛ' : 'English'}>{language === 'en' ? 'አማ' : 'EN'}</button><span className="topbar-date"><CalendarDays size={15} /> {todayLabel}</span>{adminAuthenticated && <button type="button" className="topbar-logout" onClick={signOutAdmin} aria-label="Sign out of admin" title="Sign out"><LogOut size={16} /></button>}<img className="topbar-logo" src="/logo.jpg" alt="Birhane Hiwot" /><div className="menu-wrap"><button type="button" className="hamburger-button" aria-label={t(language, menuOpen ? 'Close navigation menu' : 'Open navigation menu')} aria-expanded={menuOpen} aria-controls="header-menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>{menuOpen && <nav id="header-menu" className="header-menu" aria-label="Main menu"><button type="button" role="menuitem" className={view === 'requests' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('requests'); setMenuOpen(false) }}><LayoutDashboard size={17} />{t(language, 'My requests')}</button><button type="button" role="menuitem" className={view === 'attendance' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('attendance'); setMenuOpen(false) }}><ClipboardCheck size={17} />{t(language, 'Attendance')}</button>{showFeedback && <button type="button" role="menuitem" className={view === 'feedback' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('feedback'); setMenuOpen(false) }}><MessageSquareText size={17} />{t(language, 'Feedback')}</button>}<button type="button" role="menuitem" className={view === 'mezmur' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('mezmur'); setMenuOpen(false) }}><Music2 size={17} />{t(language, 'Mezmur')}</button><button type="button" role="menuitem" className={view === 'admin' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openAdmin(); setMenuOpen(false) }}><ShieldCheck size={17} />{t(language, 'Admin review')}{pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}</button>{adminAuthenticated && <button type="button" role="menuitem" className={view === 'notifier' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openNotifier(); setMenuOpen(false) }}><Bell size={17} />{t(language, 'Notifier')}{totalSubscribers > 0 && <span className="nav-count">{totalSubscribers}</span>}</button>}{adminAuthenticated && <button type="button" role="menuitem" className={view === 'accounts' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { setView('accounts'); setMenuOpen(false) }}><KeyRound size={17} />{t(language, 'Admin accounts')}</button>}<button type="button" role="menuitem" className={view === 'notifications' ? 'header-menu-item active' : 'header-menu-item'} onClick={() => { openInbox(); setMenuOpen(false) }}><BellRing size={17} />{t(language, 'Notifications')}{unreadCount > 0 && <span className="nav-count nav-count-alert">{unreadCount}</span>}</button></nav>}</div></div>
         </header>
 
-        {(view === 'requests' || view === 'attendance' || view === 'feedback') && (
+        {(view === 'requests' || view === 'attendance' || view === 'feedback' || view === 'mezmur') && (
           <div className="front-tabs" role="tablist" aria-label={t(language, 'WORKSPACE')}>
             <button type="button" role="tab" aria-selected={view === 'requests'} className={view === 'requests' ? 'front-tab active' : 'front-tab'} onClick={() => setView('requests')}>
               <LayoutDashboard size={16} strokeWidth={1.8} /> {t(language, 'Permission desk')}
@@ -926,6 +996,9 @@ function App() {
             {showFeedback && <button type="button" role="tab" aria-selected={view === 'feedback'} className={view === 'feedback' ? 'front-tab active' : 'front-tab'} onClick={() => setView('feedback')}>
               <MessageSquareText size={16} strokeWidth={1.8} /> {t(language, 'Feedback')}
             </button>}
+            <button type="button" role="tab" aria-selected={view === 'mezmur'} className={view === 'mezmur' ? 'front-tab active' : 'front-tab'} onClick={() => setView('mezmur')}>
+              <Music2 size={16} strokeWidth={1.8} /> {t(language, 'Mezmur')}
+            </button>
           </div>
         )}
 
@@ -1005,8 +1078,25 @@ function App() {
             </section>
             <section className="admin-summary"><div><span>{t(language, 'ALL REQUESTS')}</span><strong>{requests.length.toString().padStart(2, '0')}</strong></div><div><span>{t(language, 'Approved').toUpperCase()}</span><strong>{approvedCount.toString().padStart(2, '0')}</strong></div><div><span>{t(language, 'REJECTED')}</span><strong>{rejectedCount.toString().padStart(2, '0')}</strong></div><div className="summary-accent"><span>{t(language, 'OPEN')}</span><strong>{pendingCount.toString().padStart(2, '0')}</strong></div></section>
             <section className="log-panel">
-              <div className="log-heading"><div><div className="eyebrow">{t(language, 'INBOX')}</div><h2>{t(language, 'All permissions')} <span>{filteredRequests.length}</span></h2></div><button type="button" className="export-button" onClick={() => { setSearch(''); setDateFilter('') }}><X size={15} /> {t(language, 'Clear filters')}</button></div>
-              <div className="filters-row"><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t(language, 'Search name or Telegram username')} aria-label={t(language, 'Filter by name or Telegram username')} /></label><label className="date-filter"><CalendarDays size={16} /><input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} aria-label={t(language, 'Filter by date')} /></label><span className="filter-caption">{t(language, 'FILTER REQUESTS')}</span></div>
+              <div className="log-heading"><div><div className="eyebrow">{t(language, 'INBOX')}</div><h2>{t(language, 'All permissions')} <span>{filteredRequests.length}</span></h2></div><button type="button" className="export-button" onClick={() => { setSearch(''); setDateFilter(''); setPeriodFilter('all') }}><X size={15} /> {t(language, 'Clear filters')}</button></div>
+              <div className="filters-row"><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t(language, 'Search name or Telegram username')} aria-label={t(language, 'Filter by name or Telegram username')} /></label><label className="date-filter"><CalendarDays size={16} /><input type="date" value={dateFilter} onChange={(event) => { setDateFilter(event.target.value); if (event.target.value) setPeriodFilter('all') }} aria-label={t(language, 'Filter by date')} /></label><span className="filter-caption">{t(language, 'FILTER REQUESTS')}</span></div>
+              <div className="period-row">
+                <div className="period-filters" role="group" aria-label={t(language, 'Filter by period')}>
+                  {(['all', 'week', 'month', 'year'] as PeriodFilter[]).map((period) => (
+                    <button key={period} type="button" aria-pressed={periodFilter === period} className={periodFilter === period ? 'period-chip active' : 'period-chip'} onClick={() => choosePeriod(period)}>
+                      {t(language, period === 'all' ? 'All' : period === 'week' ? 'This week' : period === 'month' ? 'This month' : 'This year')}
+                      {periodFilter === period && periodLabel(period, logCalendar, language) && <small>{periodLabel(period, logCalendar, language)}</small>}
+                    </button>
+                  ))}
+                </div>
+                <div className="calendar-switch" role="group" aria-label={t(language, 'Calendar')}>
+                  {(['gregorian', 'ethiopian'] as CalendarKind[]).map((calendar) => (
+                    <button key={calendar} type="button" aria-pressed={logCalendar === calendar} className={logCalendar === calendar ? 'active' : ''} onClick={() => chooseCalendar(calendar)}>
+                      {t(language, calendar === 'gregorian' ? 'Gregorian' : 'Ethiopian')}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="table-wrap"><table><thead><tr><th>{t(language, 'REQUESTER')}</th><th>{t(language, 'PERMISSION')}</th><th>{t(language, 'DATE NEEDED')}</th><th>{t(language, 'PHONE')}</th><th>{t(language, 'REASON')}</th><th>{t(language, 'STATUS')}</th><th className="action-column">{t(language, 'REVIEW')}</th></tr></thead><tbody>{filteredRequests.map((request) => <tr key={request.id}><td><div className="requester-cell"><span className="requester-avatar">{request.name.charAt(0).toUpperCase()}</span><span><strong>{request.name}</strong><small>{request.username}</small></span></div></td><td><span className="type-tag">{t(language, request.type)}</span></td><td className="date-cell">{formatDate(request.date, language)}{request.submittedAt && <small className="submitted-at">{t(language, 'Submitted on')}: {formatDateTime(request.submittedAt, language)}</small>}</td><td className="phone-cell">{request.phone}</td><td className="reason-cell" title={request.reason}>{request.reason}</td><td><StatusBadge status={request.status} language={language} /></td><td><div className="review-actions">{request.status === 'pending' ? <><button type="button" className="approve-button" onClick={() => updateStatus(request.id, 'approved')} aria-label={`${t(language, 'Approve')} ${request.name}`} title={t(language, 'Approve')}><Check size={16} /></button><button type="button" className="reject-button" onClick={() => updateStatus(request.id, 'rejected')} aria-label={`${t(language, 'Reject')} ${request.name}`} title={t(language, 'Reject')}><X size={16} /></button></> : <span className="reviewed-mark" aria-label={t(language, 'Reviewed')}><Check size={15} /></span>}</div></td></tr>)}</tbody></table>
                 {filteredRequests.length === 0 && <div className="table-empty"><Search size={20} /><strong>{t(language, 'No requests found')}</strong><span>{t(language, 'Try a different name, username, or date.')}</span></div>}</div>
               <div className="table-foot"><span>{language === 'am' ? `${filteredRequests.length} ከ ${requests.length} ጥያቄዎች እየታዩ ነው` : `Showing ${filteredRequests.length} of ${requests.length} requests`}</span><span><span className="online-dot" /> {t(language, 'Up to date')}</span></div>
