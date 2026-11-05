@@ -1343,7 +1343,7 @@ function App() {
         ) : view === 'accounts' && adminAuthenticated ? (
           <AdminAccounts language={language} notify={setToast} />
         ) : view === 'feedback' && showFeedback ? (
-          <Feedback language={language} isAdmin={isMainAdmin} defaultName={initialName} headers={telegramHeaders} notify={setToast} />
+          <Feedback language={language} isAdmin={isMainAdmin} headers={telegramHeaders} notify={setToast} />
         ) : view === 'attendance' ? (
           <Attendance language={language} isAdmin={adminAuthenticated} defaultName={initialName} headers={telegramHeaders} notify={setToast} />
         ) : (

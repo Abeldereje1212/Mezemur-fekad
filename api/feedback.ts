@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { ObjectId } from 'mongodb'
 import type { VercelRequest, VercelResponse } from './_lib/http.js'
 import { feedbackCollection } from './_lib/mongo.js'
@@ -12,9 +13,22 @@ function clientId(request: VercelRequest) {
   return typeof value === 'string' && value.length <= 100 ? value : undefined
 }
 
+// Feedback is always anonymous: the sender is stored only as a one-way hash,
+// enough for their own history and the cooldown but not to tell who wrote it.
+function senderFilter(request: VercelRequest) {
+  const telegramUser = getTelegramUser(request)
+  const client = clientId(request)
+  const raw = telegramUser ? `tg:${telegramUser.id}` : client ? `client:${client}` : null
+  if (!raw) return null
+  const sender = createHmac('sha256', process.env.SESSION_SECRET || 'feedback-sender').update(raw).digest('base64url')
+  // Older records still carry the raw IDs.
+  const legacy = telegramUser ? { telegramId: telegramUser.id } : { clientId: client }
+  return { sender, filter: { $or: [{ sender }, legacy] } }
+}
+
 // Member feedback box.
-// GET: the main admin gets every message; everyone else gets only what they sent.
-// POST: anyone sends feedback (optionally anonymous).
+// GET: the main admin gets every message (never who sent it); everyone else gets only what they sent.
+// POST: anyone sends anonymous feedback.
 // PATCH { id, read } and DELETE { id }: main admin only.
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   try {
@@ -26,19 +40,15 @@ export default async function handler(request: VercelRequest, response: VercelRe
         const records = await collection.find().sort({ submittedAt: -1 }).limit(300).toArray()
         return response.status(200).json({
           role: 'admin',
-          feedback: records.map((record) => ({
-            id: record._id.toString(), message: record.message, name: record.anonymous ? undefined : record.name,
-            username: record.anonymous ? undefined : record.username, anonymous: record.anonymous, read: record.read, submittedAt: record.submittedAt,
-          })),
+          feedback: records.map((record) => ({ id: record._id.toString(), message: record.message, read: record.read, submittedAt: record.submittedAt })),
         })
       }
-      const telegramUser = getTelegramUser(request)
-      const owner = telegramUser ? { telegramId: telegramUser.id } : clientId(request) ? { clientId: clientId(request) } : null
+      const owner = senderFilter(request)
       if (!owner) return response.status(200).json({ role: 'user', feedback: [] })
-      const records = await collection.find(owner).sort({ submittedAt: -1 }).limit(20).toArray()
+      const records = await collection.find(owner.filter).sort({ submittedAt: -1 }).limit(20).toArray()
       return response.status(200).json({
         role: 'user',
-        feedback: records.map((record) => ({ id: record._id.toString(), message: record.message, anonymous: record.anonymous, read: record.read, submittedAt: record.submittedAt })),
+        feedback: records.map((record) => ({ id: record._id.toString(), message: record.message, read: record.read, submittedAt: record.submittedAt })),
       })
     }
 
@@ -47,35 +57,24 @@ export default async function handler(request: VercelRequest, response: VercelRe
     if (request.method === 'POST') {
       const message = typeof body.message === 'string' ? body.message.trim() : ''
       if (message.length < 2 || message.length > MAX_MESSAGE_LENGTH) return response.status(400).json({ error: 'Please write your feedback (up to 2000 characters).' })
-      const telegramUser = getTelegramUser(request)
-      const client = clientId(request)
-      if (!telegramUser && !client) return response.status(400).json({ error: 'Please write your feedback (up to 2000 characters).' })
+      const owner = senderFilter(request)
+      if (!owner) return response.status(400).json({ error: 'Please write your feedback (up to 2000 characters).' })
 
-      const owner = telegramUser ? { telegramId: telegramUser.id } : { clientId: client }
-      const latest = await collection.findOne(owner, { sort: { submittedAt: -1 } })
+      const latest = await collection.findOne(owner.filter, { sort: { submittedAt: -1 } })
       if (latest && Date.now() - new Date(latest.submittedAt).getTime() < SUBMIT_COOLDOWN_MS) {
         return response.status(429).json({ error: 'Please wait a moment before sending more feedback.' })
       }
 
-      const anonymous = body.anonymous === true
-      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : ''
-      const telegramName = [telegramUser?.first_name, telegramUser?.last_name].filter(Boolean).join(' ')
       const record = {
         message,
-        anonymous,
-        // Anonymous feedback keeps only the IDs needed for the sender's own history and the cooldown.
-        ...(anonymous ? {} : {
-          name: name || telegramName || undefined,
-          username: telegramUser?.username ? `@${telegramUser.username}` : undefined,
-        }),
-        telegramId: telegramUser?.id,
-        clientId: client,
+        anonymous: true,
+        sender: owner.sender,
         read: false,
         submittedAt: new Date().toISOString(),
       }
       const result = await collection.insertOne(record)
       return response.status(201).json({
-        feedback: { id: result.insertedId.toString(), message, anonymous, read: false, submittedAt: record.submittedAt },
+        feedback: { id: result.insertedId.toString(), message, read: false, submittedAt: record.submittedAt },
       })
     }
 

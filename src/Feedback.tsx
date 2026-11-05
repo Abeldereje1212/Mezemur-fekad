@@ -6,9 +6,6 @@ type Language = 'en' | 'am'
 interface FeedbackItem {
   id: string
   message: string
-  name?: string
-  username?: string
-  anonymous: boolean
   read: boolean
   submittedAt: string
 }
@@ -16,7 +13,6 @@ interface FeedbackItem {
 interface FeedbackProps {
   language: Language
   isAdmin: boolean
-  defaultName: string
   headers: () => Record<string, string>
   notify: (message: string) => void
 }
@@ -27,11 +23,9 @@ const am: Record<string, string> = {
   'Read what members are saying.': 'አባላት የሰጧቸውን አስተያየቶች ያንብቡ።',
   'NEW FEEDBACK': 'አዲስ አስተያየት',
   'Write your feedback': 'አስተያየትዎን ይጻፉ',
-  'Your name (optional)': 'ስምዎ (አማራጭ)',
   'Your feedback': 'አስተያየትዎ',
   'What would you like to share?': 'ምን ማካፈል ይፈልጋሉ?',
-  'Send anonymously': 'ስሜ ሳይገለጽ ላክ',
-  'Your name will not be shown to the admin.': 'ስምዎ ለአስተዳዳሪው አይታይም።',
+  'Feedback is anonymous. The admin will not see who sent it.': 'አስተያየት ስም አልባ ነው። አስተዳዳሪው ማን እንደላከው አያውቅም።',
   'Send feedback': 'አስተያየት ላክ',
   'Sending…': 'በመላክ ላይ…',
   'Thank you! Your feedback was sent.': 'እናመሰግናለን! አስተያየትዎ ተልኳል።',
@@ -55,7 +49,7 @@ const am: Record<string, string> = {
   'Something went wrong.': 'ችግር ተፈጥሯል።',
 }
 
-export default function Feedback({ language, isAdmin, defaultName, headers, notify }: FeedbackProps) {
+export default function Feedback({ language, isAdmin, headers, notify }: FeedbackProps) {
   const tx = (text: string) => (language === 'am' ? am[text] ?? text : text)
   const formatDateTime = (value: string) => new Intl.DateTimeFormat(language === 'am' ? 'am-ET' : 'en', {
     day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
@@ -63,9 +57,7 @@ export default function Feedback({ language, isAdmin, defaultName, headers, noti
 
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [name, setName] = useState(defaultName)
   const [message, setMessage] = useState('')
-  const [anonymous, setAnonymous] = useState(false)
   const [sending, setSending] = useState(false)
 
   const load = useCallback(async () => {
@@ -99,7 +91,7 @@ export default function Feedback({ language, isAdmin, defaultName, headers, noti
     if (sending) return
     setSending(true)
     try {
-      const result = await call('POST', { message, name, anonymous })
+      const result = await call('POST', { message })
       if (result.feedback) setItems((current) => [result.feedback!, ...current])
       setMessage('')
       notify(tx('Thank you! Your feedback was sent.'))
@@ -149,8 +141,7 @@ export default function Feedback({ language, isAdmin, defaultName, headers, noti
           {items.map((item) => (
             <article key={item.id} className={item.read ? 'feedback-item' : 'feedback-item unread'}>
               <div className="feedback-meta">
-                <strong>{item.anonymous ? tx('Anonymous') : item.name || item.username || tx('Anonymous')}</strong>
-                {!item.anonymous && item.username && <span>{item.username}</span>}
+                <strong>{tx('Anonymous')}</strong>
                 <time dateTime={item.submittedAt}>{formatDateTime(item.submittedAt)}</time>
               </div>
               <p className="feedback-message">{item.message}</p>
@@ -179,9 +170,8 @@ export default function Feedback({ language, isAdmin, defaultName, headers, noti
         <section className="form-panel">
           <div className="panel-heading"><div><div className="eyebrow">{tx('NEW FEEDBACK')}</div><h2>{tx('Write your feedback')}</h2></div></div>
           <form className="request-form" onSubmit={submit}>
-            {!anonymous && <label className="field"><span>{tx('Your name (optional)')}</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} /></label>}
             <label className="field"><span>{tx('Your feedback')}</span><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder={tx('What would you like to share?')} rows={6} required minLength={2} maxLength={2000} /></label>
-            <label className="feedback-anon"><input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} /> <span>{tx('Send anonymously')}{anonymous && <small>{tx('Your name will not be shown to the admin.')}</small>}</span></label>
+            <p className="feedback-anon"><span>{tx('Feedback is anonymous. The admin will not see who sent it.')}</span></p>
             <div className="form-footer"><span>{message.length}/2000</span><button className="submit-button" type="submit" disabled={sending}>{sending ? tx('Sending…') : tx('Send feedback')} {!sending && <Send size={15} />}</button></div>
           </form>
         </section>

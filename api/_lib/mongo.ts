@@ -127,6 +127,8 @@ export async function sentNotificationsCollection(): Promise<Collection<SentNoti
 export interface FeedbackRecord extends Document {
   message: string
   anonymous: boolean
+  sender?: string
+  // Legacy fields from before feedback was always anonymous.
   name?: string
   username?: string
   telegramId?: string
@@ -138,6 +140,7 @@ export interface FeedbackRecord extends Document {
 export async function feedbackCollection(): Promise<Collection<FeedbackRecord>> {
   const collection = (await attendanceDb()).collection<FeedbackRecord>('feedback')
   await collection.createIndex({ submittedAt: -1 })
+  await collection.createIndex({ sender: 1, submittedAt: -1 })
   await collection.createIndex({ telegramId: 1, submittedAt: -1 })
   await collection.createIndex({ clientId: 1, submittedAt: -1 })
   return collection
