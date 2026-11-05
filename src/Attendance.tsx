@@ -6,7 +6,7 @@ import AttendanceReport from './AttendanceReport'
 
 type Language = 'en' | 'am'
 type AttendanceStatus = 'present' | 'absent' | 'excused'
-type MemberStatus = 'pending' | 'approved' | 'rejected'
+type MemberStatus = 'pending' | 'approved' | 'rejected' | 'removed'
 
 interface Member {
   telegramId: string
@@ -70,8 +70,10 @@ const am: Record<string, string> = {
   'Sessions': 'ፕሮግራሞች', 'Members': 'አባላት',
   'Open this app from the Telegram bot to use attendance.': 'ክትትልን ለመጠቀም መተግበሪያውን ከቴሌግራም ቦቱ ይክፈቱ።',
   'Join the attendance list': 'የክትትል ዝርዝሩን ይቀላቀሉ',
-  'The admin will approve you before you can check in.': 'ከመመዝገብዎ በፊት አስተዳዳሪው ያጸድቅዎታል።',
-  'Full name': 'ሙሉ ስም', 'Phone number': 'ስልክ ቁጥር', 'Send join request': 'የመቀላቀል ጥያቄ ላክ',
+  'Join to start checking in.': 'መመዝገብ ለመጀመር ይቀላቀሉ።',
+  'You were removed from the attendance list. You can ask to rejoin; the admin will need to approve it.': 'ከክትትል ዝርዝሩ ተወግደዋል። እንደገና ለመቀላቀል መጠየቅ ይችላሉ፤ አስተዳዳሪው ማጽደቅ አለበት።',
+  'Full name': 'ሙሉ ስም', 'Phone number': 'ስልክ ቁጥር', 'Send join request': 'የመቀላቀል ጥያቄ ላክ', 'Join': 'ተቀላቀል',
+  'You joined the attendance list.': 'የክትትል ዝርዝሩን ተቀላቅለዋል።',
   'Your join request is waiting for admin approval.': 'የመቀላቀል ጥያቄዎ የአስተዳዳሪ ይሁንታ እየጠበቀ ነው።',
   'Your previous join request was not approved. You can send a new one.': 'ያለፈው የመቀላቀል ጥያቄዎ አልጸደቀም። አዲስ መላክ ይችላሉ።',
   'Join request sent.': 'የመቀላቀል ጥያቄ ተልኳል።',
@@ -97,7 +99,9 @@ const am: Record<string, string> = {
   'Delete this session and all its attendance?': 'ይህ ፕሮግራም እና መዝገቦቹ ይሰረዙ?',
   'Remove this member from the attendance list?': 'ይህ አባል ከክትትል ዝርዝሩ ይወገድ?',
   'Waiting for approval': 'ይሁንታ የሚጠብቁ', 'Approved members': 'የጸደቁ አባላት',
+  'Rejoin requests': 'እንደገና የመቀላቀል ጥያቄዎች', 'Members who were removed and asked to come back.': 'ተወግደው እንደገና ለመመለስ የጠየቁ አባላት።',
   'No one is waiting.': 'የሚጠብቅ የለም።', 'No approved members yet.': 'ገና የጸደቀ አባል የለም።',
+  'No members yet.': 'ገና አባል የለም።',
   'Reports': 'ሪፖርቶች',
   'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Remove': 'አስወግድ', 'Clear mark': 'ምልክት አጽዳ',
   'No approved members yet. Approve members in the Members tab.': 'ገና የጸደቀ አባል የለም። በአባላት ክፍል ያጽድቁ።',
@@ -201,8 +205,8 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
     event.preventDefault()
     setBusy(true)
     try {
-      await api('/api/attendance', { method: 'POST', body: JSON.stringify({ action: 'join', name, phone }) }, headers())
-      notify(tx('Join request sent.'))
+      const result = await api<{ member: Member }>('/api/attendance', { method: 'POST', body: JSON.stringify({ action: 'join', name, phone }) }, headers())
+      notify(tx(result.member.status === 'approved' ? 'You joined the attendance list.' : 'Join request sent.'))
       await load()
     } catch (error) {
       notify(tx(error instanceof Error ? error.message : 'The attendance service is temporarily unavailable.'))
@@ -260,15 +264,20 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
   if (loading && !view) return <p className="empty-copy">…</p>
 
   const member = view?.member
-  if (!member || member.status === 'rejected') {
+  if (!member || member.status === 'rejected' || member.status === 'removed') {
+    const description = member?.status === 'removed'
+      ? 'You were removed from the attendance list. You can ask to rejoin; the admin will need to approve it.'
+      : member?.status === 'rejected'
+        ? 'Your previous join request was not approved. You can send a new one.'
+        : 'Join to start checking in.'
     return (
       <section className="form-panel att-panel">
         <div className="panel-heading"><div><div className="eyebrow">{tx('ATTENDANCE')}</div><h2>{tx('Join the attendance list')}</h2></div><UserPlus size={18} className="att-heading-icon" /></div>
-        <p className="panel-description">{tx(member?.status === 'rejected' ? 'Your previous join request was not approved. You can send a new one.' : 'The admin will approve you before you can check in.')}</p>
+        <p className="panel-description">{tx(description)}</p>
         <form className="request-form" onSubmit={join}>
           <label className="field"><span>{tx('Full name')}</span><input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} /></label>
           <label className="field"><span>{tx('Phone number')}</span><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+251 9XX XXX XXX" required minLength={5} maxLength={40} /></label>
-          <div className="form-footer"><span /><button className="submit-button" type="submit" disabled={busy}>{tx('Send join request')}</button></div>
+          <div className="form-footer"><span /><button className="submit-button" type="submit" disabled={busy}>{tx(member ? 'Send join request' : 'Join')}</button></div>
         </form>
       </section>
     )
@@ -443,7 +452,8 @@ function AdminAttendance({ tx, formatDateTime, headers, notify, language }: Sect
       ) : tab === 'members' ? (
         <div className="att-admin-grid">
           <section className="form-panel att-panel">
-            <div className="panel-heading"><h2>{tx('Waiting for approval')}</h2><span className="panel-index">{pending.length}</span></div>
+            <div className="panel-heading"><h2>{tx('Rejoin requests')}</h2><span className="panel-index">{pending.length}</span></div>
+            <p className="panel-description">{tx('Members who were removed and asked to come back.')}</p>
             {pending.length === 0 && <p className="empty-copy">{tx('No one is waiting.')}</p>}
             <ul className="att-member-list">
               {pending.map((m) => (
@@ -458,8 +468,8 @@ function AdminAttendance({ tx, formatDateTime, headers, notify, language }: Sect
             </ul>
           </section>
           <section className="form-panel att-panel">
-            <div className="panel-heading"><h2>{tx('Approved members')}</h2><span className="panel-index">{approved.length}</span></div>
-            {approved.length === 0 && <p className="empty-copy">{tx('No approved members yet.')}</p>}
+            <div className="panel-heading"><h2>{tx('Members')}</h2><span className="panel-index">{approved.length}</span></div>
+            {approved.length === 0 && <p className="empty-copy">{tx('No members yet.')}</p>}
             <ul className="att-member-list">
               {approved.map((m) => (
                 <li key={m.telegramId}>
@@ -578,7 +588,7 @@ function SessionPanel({ detail, tx, formatDateTime, busy, onMark, onClose, onReo
       </div>
       {isOpen && <p className="panel-description">{tx('Closing marks everyone not checked in as Absent, or Excused if they have an approved permission for this date.')}</p>}
 
-      {roster.length === 0 && <p className="empty-copy">{tx('No approved members yet. Approve members in the Members tab.')}</p>}
+      {roster.length === 0 && <p className="empty-copy">{tx('No members yet.')}</p>}
       <ul className="att-roster">
         {roster.map((row) => (
           <li key={row.telegramId}>

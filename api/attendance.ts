@@ -301,9 +301,8 @@ export default async function handler(request: VercelRequest, response: VercelRe
       }
       const member = await (await membersCollection()).findOne({ telegramId: telegramUser.id })
       if (!member || member.status !== 'approved') {
-        // A removed member can join again, so they see the join form like a newcomer.
-        const visible = member && member.status !== 'removed' ? publicMember(member) : null
-        return response.status(200).json({ member: visible, openSessions: [], history: [] })
+        // Removed and rejected members see the join form again; their request then needs approval.
+        return response.status(200).json({ member: member ? publicMember(member) : null, openSessions: [], history: [] })
       }
       const [openSessions, myRecords] = await Promise.all([
         attendanceSessionsCollection().then((c) => c.find({ status: 'open' }).sort({ startsAt: -1 }).toArray()),
@@ -354,7 +353,8 @@ export default async function handler(request: VercelRequest, response: VercelRe
           name: name.trim(),
           phone: phone.trim(),
           ...(telegramUser.username ? { username: `@${telegramUser.username}` } : {}),
-          status: 'pending',
+          // Newcomers join right away; someone who was removed (or rejected) must be approved to come back.
+          status: existing ? 'pending' : 'approved',
           requestedAt: new Date().toISOString(),
         }
         await members.replaceOne({ telegramId: telegramUser.id }, record, { upsert: true })
