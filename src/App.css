@@ -286,7 +286,7 @@ td .status-badge { margin-top: 0; }
 .table-foot .online-dot { width: 6px; height: 6px; flex-basis: 6px; }
 .admin-footnote { margin-top: 15px; display: flex; align-items: center; gap: 7px; color: #899087; font-size: 9px; }
 .admin-footnote svg { color: #78947a; }
-.toast { position: fixed; z-index: 10; right: 25px; bottom: 23px; min-height: 46px; padding: 0 12px 0 9px; display: flex; align-items: center; gap: 10px; border: 1px solid #d8e5d7; border-radius: 4px; background: #fffefa; color: #3d5742; box-shadow: 0 8px 28px rgba(40,55,41,.12); font-size: 11px; animation: enter .2s ease-out both; }
+.toast { position: fixed; z-index: 60; right: 25px; bottom: 23px; min-height: 46px; padding: 0 12px 0 9px; display: flex; align-items: center; gap: 10px; border: 1px solid #d8e5d7; border-radius: 4px; background: #fffefa; color: #3d5742; box-shadow: 0 8px 28px rgba(40,55,41,.12); font-size: 11px; animation: enter .2s ease-out both; }
 .toast > span { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; background: #e5f0e2; color: #438051; }
 .toast button { margin-left: 8px; padding: 4px; display: grid; place-items: center; border: 0; background: transparent; color: #8a9589; cursor: pointer; }
 .login-backdrop { position: fixed; z-index: 9; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(31, 43, 34, .36); backdrop-filter: blur(3px); animation: enter .18s ease-out both; }
@@ -300,6 +300,10 @@ td .status-badge { margin-top: 0; }
 .login-form .field input { min-height: 40px; }
 .login-submit { width: 100%; margin-top: 3px; }
 .login-form .export-button { justify-content: center; }
+.profile-page { position: fixed; z-index: 50; inset: 0; padding: 32px 16px; display: grid; place-items: center; overflow-y: auto; background: var(--paper); }
+.profile-card { width: min(100%, 380px); }
+.profile-card h1 { margin: 7px 0 5px; color: var(--ink); font: 500 28px/1.15 var(--display); }
+.profile-loading { margin: 0; color: #858c82; font-size: 12px; }
 .login-error { margin: -4px 0 0; color: #a75443; font-size: 10px; }
 .mobile-new-button { display: none; }
 
