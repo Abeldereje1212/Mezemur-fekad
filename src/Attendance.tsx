@@ -18,6 +18,15 @@ interface Member {
   lastSeenAt?: string
 }
 
+// Someone who filled in the details page in a normal browser; not on attendance rosters.
+interface WebVisitor {
+  id: string
+  name?: string
+  phone?: string
+  firstSeenAt: string
+  lastSeenAt: string
+}
+
 interface Session {
   id: string
   title: string
@@ -102,6 +111,8 @@ const am: Record<string, string> = {
   'Rejoin requests': 'እንደገና የመቀላቀል ጥያቄዎች', 'Members who were removed and asked to come back.': 'ተወግደው እንደገና ለመመለስ የጠየቁ አባላት።',
   'No one is waiting.': 'የሚጠብቅ የለም።', 'No approved members yet.': 'ገና የጸደቀ አባል የለም።',
   'No members yet.': 'ገና አባል የለም።',
+  'Website visitors': 'የድረ-ገጽ ጎብኚዎች', 'No website visitors yet.': 'ገና የድረ-ገጽ ጎብኚ የለም።', 'Last seen': 'ለመጨረሻ ጊዜ የታየው',
+  'People who opened the app in a browser instead of Telegram. They are not on the attendance list.': 'መተግበሪያውን በቴሌግራም ሳይሆን በአሳሽ የከፈቱ። በክትትል ዝርዝሩ ውስጥ የሉም።',
   'No phone yet': 'ስልክ ገና አልገባም',
   'Reports': 'ሪፖርቶች',
   'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Remove': 'አስወግድ', 'Clear mark': 'ምልክት አጽዳ',
@@ -337,6 +348,7 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
 function AdminAttendance({ tx, formatDateTime, headers, notify, language }: SectionProps & { language: Language }) {
   const [tab, setTab] = useState<'sessions' | 'members' | 'reports'>('sessions')
   const [members, setMembers] = useState<Member[]>([])
+  const [webVisitors, setWebVisitors] = useState<WebVisitor[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<SessionDetail | null>(null)
@@ -349,8 +361,9 @@ function AdminAttendance({ tx, formatDateTime, headers, notify, language }: Sect
 
   const loadOverview = useCallback(async () => {
     try {
-      const result = await api<{ members: Member[]; sessions: Session[] }>('/api/attendance?view=admin', { method: 'GET' }, headers())
+      const result = await api<{ members: Member[]; webVisitors?: WebVisitor[]; sessions: Session[] }>('/api/attendance?view=admin', { method: 'GET' }, headers())
       setMembers(result.members)
+      setWebVisitors(result.webVisitors ?? [])
       setSessions(result.sessions)
     } catch (error) {
       fail(error)
@@ -466,6 +479,18 @@ function AdminAttendance({ tx, formatDateTime, headers, notify, language }: Sect
                       <button type="button" className="approve-button" disabled={busy} onClick={() => reviewMember(m.telegramId, 'approved')} title={tx('Approve')} aria-label={`${tx('Approve')} ${m.name}`}><Check size={16} /></button>
                       <button type="button" className="reject-button" disabled={busy} onClick={() => reviewMember(m.telegramId, 'rejected')} title={tx('Reject')} aria-label={`${tx('Reject')} ${m.name}`}><X size={16} /></button>
                     </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section className="form-panel att-panel">
+              <div className="panel-heading"><h2>{tx('Website visitors')}</h2><span className="panel-index">{webVisitors.length}</span></div>
+              <p className="panel-description">{tx('People who opened the app in a browser instead of Telegram. They are not on the attendance list.')}</p>
+              {webVisitors.length === 0 && <p className="empty-copy">{tx('No website visitors yet.')}</p>}
+              <ul className="att-member-list">
+                {webVisitors.map((v) => (
+                  <li key={v.id}>
+                    <div><strong>{v.name}</strong><span>{[v.phone, `${tx('Last seen')} ${formatDateTime(v.lastSeenAt)}`].filter(Boolean).join(' · ')}</span></div>
                   </li>
                 ))}
               </ul>

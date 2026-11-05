@@ -184,6 +184,28 @@ export async function membersCollection(): Promise<Collection<MemberRecord>> {
   return collection
 }
 
+// People who open the app in a normal browser, identified only by that browser's random client ID.
+// Kept apart from members so they never appear on attendance rosters.
+export interface WebVisitorRecord extends Document {
+  clientId: string
+  name?: string
+  phone?: string
+  firstSeenAt: string
+  lastSeenAt: string
+}
+
+let webVisitorsIndexReady: Promise<string> | undefined
+
+export async function webVisitorsCollection(): Promise<Collection<WebVisitorRecord>> {
+  const collection = (await attendanceDb()).collection<WebVisitorRecord>('web_visitors')
+  webVisitorsIndexReady ??= collection.createIndex({ clientId: 1 }, { unique: true }).catch((error) => {
+    webVisitorsIndexReady = undefined
+    throw error
+  })
+  await webVisitorsIndexReady
+  return collection
+}
+
 export interface AttendanceSessionRecord extends Document {
   title: string
   startsAt: string

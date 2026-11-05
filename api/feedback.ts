@@ -2,22 +2,16 @@ import { createHmac } from 'node:crypto'
 import { ObjectId } from 'mongodb'
 import type { VercelRequest, VercelResponse } from './_lib/http.js'
 import { feedbackCollection } from './_lib/mongo.js'
-import { adminSession, getTelegramUser } from './_lib/security.js'
+import { adminSession, getClientId, getTelegramUser } from './_lib/security.js'
 
 const MAX_MESSAGE_LENGTH = 2000
 const SUBMIT_COOLDOWN_MS = 30_000
-
-function clientId(request: VercelRequest) {
-  const header = request.headers['x-client-id']
-  const value = Array.isArray(header) ? header[0] : header
-  return typeof value === 'string' && value.length <= 100 ? value : undefined
-}
 
 // Feedback is always anonymous: the sender is stored only as a one-way hash,
 // enough for their own history and the cooldown but not to tell who wrote it.
 function senderFilter(request: VercelRequest) {
   const telegramUser = getTelegramUser(request)
-  const client = clientId(request)
+  const client = getClientId(request)
   const raw = telegramUser ? `tg:${telegramUser.id}` : client ? `client:${client}` : null
   if (!raw) return null
   const sender = createHmac('sha256', process.env.SESSION_SECRET || 'feedback-sender').update(raw).digest('base64url')

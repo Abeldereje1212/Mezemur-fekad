@@ -13,6 +13,8 @@ interface ContactWebApp {
 interface PhonePromptProps {
   language: Language
   defaultName: string
+  isAdmin: boolean
+  onAdminSignIn: () => void
   headers: () => Record<string, string>
   notify: (message: string) => void
 }
@@ -47,6 +49,8 @@ const am: Record<string, string> = {
   'Loading…': 'በመጫን ላይ…',
   "Couldn't connect. Check your internet and try again.": 'መገናኘት አልተቻለም። ኢንተርኔትዎን ያረጋግጡና እንደገና ይሞክሩ።',
   'Try again': 'እንደገና ሞክር',
+  'Admin? Sign in': 'አስተዳዳሪ ነዎት? ይግቡ',
+  'This browser could not be identified. Allow site storage and reload.': 'ይህ አሳሽ ሊለይ አልቻለም። የድረ-ገጽ ማከማቻ ይፍቀዱና እንደገና ይጫኑ።',
   'Your details were saved.': 'መረጃዎ ተቀምጧል።',
   'Please enter your full name.': 'እባክዎ ሙሉ ስምዎን ያስገቡ።',
   'Please enter a valid phone number.': 'እባክዎ ትክክለኛ ስልክ ቁጥር ያስገቡ።',
@@ -54,12 +58,14 @@ const am: Record<string, string> = {
   'Something went wrong.': 'ችግር ተፈጥሯል።',
 }
 
-// The first page a Telegram user sees: it records the visit (which makes a new user a member) and,
-// until the member has given their full name and phone number, covers the whole app with only those questions.
-export default function PhonePrompt({ language, defaultName, headers, notify }: PhonePromptProps) {
+// The first page everyone sees: it records the visit (a Telegram user becomes a member, a browser user a
+// website visitor) and, until they have given their full name and phone number, covers the whole app with
+// only those questions. Signed-in admins skip it.
+export default function PhonePrompt({ language, defaultName, isAdmin, onAdminSignIn, headers, notify }: PhonePromptProps) {
   const tx = (text: string) => (language === 'am' ? am[text] ?? text : text)
+  // Telegram users are members; browser users are recorded as website visitors. Both must answer.
   const inTelegram = Boolean(headers()['x-telegram-init-data'])
-  const [state, setState] = useState<ProfileState>(() => (inTelegram ? readProfileState() : 'done'))
+  const [state, setState] = useState<ProfileState>(readProfileState)
   const [waiting, setWaiting] = useState(false)
   const [name, setName] = useState(defaultName)
   const [phone, setPhone] = useState('')
@@ -71,25 +77,33 @@ export default function PhonePrompt({ language, defaultName, headers, notify }: 
       const response = await fetch('/api/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers() },
-        body: JSON.stringify({ action: 'visit' }),
+        body: JSON.stringify({ action: inTelegram ? 'visit' : 'web-visit' }),
       })
       if (!response.ok) throw new Error()
-      const result = await response.json() as { member?: { status: string; name?: string; phone?: string } | null }
-      const status = result.member?.status
-      const next = status === 'approved' && !result.member?.phone ? 'required' : 'done'
-      writeProfileState(next)
-      setState(next)
-      setWaiting(status === 'pending')
-      if (next === 'required' && result.member?.name) setName((current) => current || result.member!.name!)
+      if (inTelegram) {
+        const result = await response.json() as { member?: { status: string; name?: string; phone?: string } | null }
+        const status = result.member?.status
+        const next = status === 'approved' && !result.member?.phone ? 'required' : 'done'
+        writeProfileState(next)
+        setState(next)
+        setWaiting(status === 'pending')
+        if (next === 'required' && result.member?.name) setName((current) => current || result.member!.name!)
+      } else {
+        const result = await response.json() as { admin?: boolean; complete?: boolean }
+        const next = result.complete ? 'done' : 'required'
+        // An admin's browser is not remembered as done, so the page returns if they sign out.
+        if (!result.admin) writeProfileState(next)
+        setState(next)
+      }
     } catch {
       // A first-time visitor must not get into the app before we know whether their details are stored.
       setState((current) => (current === 'checking' ? 'offline' : current))
     }
-  }, [headers])
+  }, [headers, inTelegram])
 
   useEffect(() => {
-    if (inTelegram) void check()
-  }, [inTelegram, check])
+    void check()
+  }, [check])
 
   // Re-check while a rejoin request is waiting, and whenever the member comes back to the app.
   useEffect(() => {
@@ -103,13 +117,15 @@ export default function PhonePrompt({ language, defaultName, headers, notify }: 
     }
   }, [waiting, check])
 
+  const showing = state !== 'done' && !isAdmin
+
   // The app underneath must not scroll while this page is showing.
   useEffect(() => {
-    if (state === 'done') return
+    if (!showing) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previous }
-  }, [state])
+  }, [showing])
 
   function shareTelegramNumber() {
     webApp?.requestContact?.((shared, result) => {
@@ -126,7 +142,7 @@ export default function PhonePrompt({ language, defaultName, headers, notify }: 
       const response = await fetch('/api/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers() },
-        body: JSON.stringify({ action: 'complete-profile', name, phone }),
+        body: JSON.stringify({ action: inTelegram ? 'complete-profile' : 'web-complete-profile', name, phone }),
       })
       const result = await response.json().catch(() => ({})) as { error?: string }
       if (!response.ok) throw new Error(result.error || 'Something went wrong.')
@@ -140,7 +156,7 @@ export default function PhonePrompt({ language, defaultName, headers, notify }: 
     }
   }
 
-  if (state === 'done') return null
+  if (!showing) return null
 
   if (state === 'checking') {
     return <div className="profile-page" aria-busy="true"><p className="profile-loading">{tx('Loading…')}</p></div>
@@ -168,9 +184,10 @@ export default function PhonePrompt({ language, defaultName, headers, notify }: 
         <form className="login-form" onSubmit={save}>
           <label className="field"><span>{tx('Full name')}</span><input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={120} /></label>
           <label className="field"><span>{tx('Phone number')}</span><input type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+251 9XX XXX XXX" required minLength={5} maxLength={40} /></label>
-          {webApp?.requestContact && <button type="button" className="export-button" onClick={shareTelegramNumber}><Phone size={14} /> {tx('Share my Telegram number')}</button>}
+          {inTelegram && webApp?.requestContact && <button type="button" className="export-button" onClick={shareTelegramNumber}><Phone size={14} /> {tx('Share my Telegram number')}</button>}
           <button type="submit" className="submit-button login-submit" disabled={saving}>{tx(saving ? 'Saving…' : 'Continue')}</button>
         </form>
+        {!inTelegram && <button type="button" className="profile-admin-link" onClick={onAdminSignIn}>{tx('Admin? Sign in')}</button>}
       </section>
     </div>
   )

@@ -116,6 +116,13 @@ export function getTelegramUser(request: VercelRequest) {
   return verifyTelegramInitData(initDataHeader(request))
 }
 
+// Random per-browser ID the app sends as x-client-id. Unverified: it only tells browsers apart.
+export function getClientId(request: VercelRequest) {
+  const header = request.headers['x-client-id']
+  const value = Array.isArray(header) ? header[0] : header
+  return typeof value === 'string' && value.length > 0 && value.length <= 100 ? value : undefined
+}
+
 export function telegramAuthFailure(request: VercelRequest) {
   const result = checkTelegramInitData(initDataHeader(request))
   const problem = 'problem' in result ? result.problem : 'malformed'

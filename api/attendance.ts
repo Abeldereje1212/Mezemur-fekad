@@ -7,12 +7,13 @@ import {
   checkInAttemptsCollection,
   membersCollection,
   permissionRequests,
+  webVisitorsCollection,
   type AttendanceRecord,
   type AttendanceSessionRecord,
   type AttendanceStatus,
   type MemberRecord,
 } from './_lib/mongo.js'
-import { constantTimeEqual, getTelegramUser, isAdmin, signScopedToken, telegramAuthFailure, verifyScopedToken, type VerifiedTelegramUser } from './_lib/security.js'
+import { constantTimeEqual, getClientId, getTelegramUser, isAdmin, signScopedToken, telegramAuthFailure, verifyScopedToken, type VerifiedTelegramUser } from './_lib/security.js'
 import { buildXlsx } from './_lib/xlsx.js'
 
 // The check-in code changes every 30 seconds; the previous code is still accepted so a member
@@ -290,8 +291,9 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
       if (query.get('view') === 'admin') {
         if (!admin) return response.status(401).json({ error: 'Admin sign-in is required.' })
-        const [members, sessions, records] = await Promise.all([
+        const [members, webVisitors, sessions, records] = await Promise.all([
           membersCollection().then((c) => c.find({ status: { $in: ['visitor', 'pending', 'approved'] } }).sort({ requestedAt: -1 }).toArray()),
+          webVisitorsCollection().then((c) => c.find({ phone: { $exists: true } }).sort({ lastSeenAt: -1 }).limit(300).toArray()),
           attendanceSessionsCollection().then((c) => c.find({}).sort({ startsAt: -1 }).limit(50).toArray()),
           attendanceRecordsCollection().then((c) => c.aggregate<{ _id: { sessionId: string; status: AttendanceStatus }; count: number }>([
             { $group: { _id: { sessionId: '$sessionId', status: '$status' }, count: { $sum: 1 } } },
@@ -305,6 +307,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
         }
         return response.status(200).json({
           members: members.map(publicMember),
+          webVisitors: webVisitors.map((v) => ({ id: v._id.toString(), name: v.name, phone: v.phone, firstSeenAt: v.firstSeenAt, lastSeenAt: v.lastSeenAt })),
           sessions: sessions.map((s) => ({ ...publicSession(s), counts: counts.get(s._id.toString()) ?? { present: 0, absent: 0, excused: 0 } })),
         })
       }
@@ -354,6 +357,36 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
     const body = request.body ?? {}
     const action = body.action
+
+    // ---- Browser visitors (outside Telegram): they must give name and phone too ----
+    if (action === 'web-visit' || action === 'web-complete-profile') {
+      // Signed-in admins skip the details page.
+      if (admin) return response.status(200).json({ admin: true, complete: true })
+      const clientId = getClientId(request)
+      if (!clientId) return response.status(400).json({ error: 'This browser could not be identified. Allow site storage and reload.' })
+      const visitors = await webVisitorsCollection()
+      const now = new Date().toISOString()
+
+      if (action === 'web-visit') {
+        const visitor = await visitors.findOneAndUpdate(
+          { clientId },
+          { $set: { lastSeenAt: now }, $setOnInsert: { clientId, firstSeenAt: now } },
+          { upsert: true, returnDocument: 'after' },
+        )
+        return response.status(200).json({ complete: Boolean(visitor?.phone) })
+      }
+
+      const name = typeof body.name === 'string' ? body.name.trim() : ''
+      const phone = typeof body.phone === 'string' ? body.phone.trim() : ''
+      if (name.length < 2 || name.length > 120) return response.status(400).json({ error: 'Please enter your full name.' })
+      if (phone.length < 5 || phone.length > 40) return response.status(400).json({ error: 'Please enter a valid phone number.' })
+      await visitors.updateOne(
+        { clientId },
+        { $set: { name, phone, lastSeenAt: now }, $setOnInsert: { clientId, firstSeenAt: now } },
+        { upsert: true },
+      )
+      return response.status(200).json({ ok: true })
+    }
 
     // ---- Member actions (Telegram identity) ----
     if (action === 'visit' || action === 'join' || action === 'complete-profile' || action === 'check-in') {
