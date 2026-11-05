@@ -304,6 +304,7 @@ td .status-badge { margin-top: 0; }
 .profile-card { width: min(100%, 380px); }
 .profile-card h1 { margin: 7px 0 5px; color: var(--ink); font: 500 28px/1.15 var(--display); }
 .profile-loading { margin: 0; color: #858c82; font-size: 12px; }
+.profile-offline { display: grid; gap: 14px; text-align: center; }
 .login-error { margin: -4px 0 0; color: #a75443; font-size: 10px; }
 .mobile-new-button { display: none; }
 

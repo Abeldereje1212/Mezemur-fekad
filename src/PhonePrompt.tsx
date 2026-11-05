@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Phone } from 'lucide-react'
 
 type Language = 'en' | 'am'
-// 'checking': not known yet on this device; 'required': must fill in the page; 'done': go straight to the app.
-type ProfileState = 'checking' | 'required' | 'done'
+// 'checking': not known yet on this device; 'offline': that first check failed;
+// 'required': must fill in the page; 'done': go straight to the app.
+type ProfileState = 'checking' | 'offline' | 'required' | 'done'
 
 interface ContactWebApp {
   requestContact?: (callback: (shared: boolean, result?: { responseUnsafe?: { contact?: { phone_number?: string } } }) => void) => void
@@ -44,6 +45,8 @@ const am: Record<string, string> = {
   'Continue': 'ቀጥል',
   'Saving…': 'በማስቀመጥ ላይ…',
   'Loading…': 'በመጫን ላይ…',
+  "Couldn't connect. Check your internet and try again.": 'መገናኘት አልተቻለም። ኢንተርኔትዎን ያረጋግጡና እንደገና ይሞክሩ።',
+  'Try again': 'እንደገና ሞክር',
   'Your details were saved.': 'መረጃዎ ተቀምጧል።',
   'Please enter your full name.': 'እባክዎ ሙሉ ስምዎን ያስገቡ።',
   'Please enter a valid phone number.': 'እባክዎ ትክክለኛ ስልክ ቁጥር ያስገቡ።',
@@ -79,8 +82,8 @@ export default function PhonePrompt({ language, defaultName, headers, notify }: 
       setWaiting(status === 'pending')
       if (next === 'required' && result.member?.name) setName((current) => current || result.member!.name!)
     } catch {
-      // Never leave someone stuck on the loading screen; the next open checks again.
-      setState((current) => (current === 'checking' ? 'done' : current))
+      // A first-time visitor must not get into the app before we know whether their details are stored.
+      setState((current) => (current === 'checking' ? 'offline' : current))
     }
   }, [headers])
 
@@ -141,6 +144,17 @@ export default function PhonePrompt({ language, defaultName, headers, notify }: 
 
   if (state === 'checking') {
     return <div className="profile-page" aria-busy="true"><p className="profile-loading">{tx('Loading…')}</p></div>
+  }
+
+  if (state === 'offline') {
+    return (
+      <div className="profile-page">
+        <section className="profile-card profile-offline" role="alert">
+          <p className="profile-loading">{tx("Couldn't connect. Check your internet and try again.")}</p>
+          <button type="button" className="submit-button login-submit" onClick={() => { setState('checking'); void check() }}>{tx('Try again')}</button>
+        </section>
+      </div>
+    )
   }
 
   // No way to skip: the page stays until the member saves their details.
