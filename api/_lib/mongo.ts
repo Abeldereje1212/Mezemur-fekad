@@ -155,16 +155,19 @@ async function attendanceDb() {
   return client.db(process.env.MONGODB_DB || 'birhane_hiwot')
 }
 
-export type MemberStatus = 'pending' | 'approved' | 'rejected' | 'removed'
+// 'visitor': opened the app but not approved yet. 'pending': a removed or rejected member asking to rejoin.
+export type MemberStatus = 'visitor' | 'pending' | 'approved' | 'rejected' | 'removed'
 
 export interface MemberRecord extends Document {
   telegramId: string
   name: string
-  phone: string
+  // Visitors are recorded from Telegram alone, so the phone is added after approval.
+  phone?: string
   username?: string
   status: MemberStatus
   requestedAt: string
   reviewedAt?: string
+  lastSeenAt?: string
 }
 
 export async function membersCollection(): Promise<Collection<MemberRecord>> {

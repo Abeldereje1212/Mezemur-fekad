@@ -6,15 +6,16 @@ import AttendanceReport from './AttendanceReport'
 
 type Language = 'en' | 'am'
 type AttendanceStatus = 'present' | 'absent' | 'excused'
-type MemberStatus = 'pending' | 'approved' | 'rejected' | 'removed'
+type MemberStatus = 'visitor' | 'pending' | 'approved' | 'rejected' | 'removed'
 
 interface Member {
   telegramId: string
   name: string
-  phone: string
+  phone?: string
   username?: string
   status: MemberStatus
   requestedAt: string
+  lastSeenAt?: string
 }
 
 interface Session {
@@ -70,10 +71,9 @@ const am: Record<string, string> = {
   'Sessions': 'ፕሮግራሞች', 'Members': 'አባላት',
   'Open this app from the Telegram bot to use attendance.': 'ክትትልን ለመጠቀም መተግበሪያውን ከቴሌግራም ቦቱ ይክፈቱ።',
   'Join the attendance list': 'የክትትል ዝርዝሩን ይቀላቀሉ',
-  'Join to start checking in.': 'መመዝገብ ለመጀመር ይቀላቀሉ።',
+  'The admin will approve you before you can check in.': 'ከመመዝገብዎ በፊት አስተዳዳሪው ያጸድቅዎታል።',
   'You were removed from the attendance list. You can ask to rejoin; the admin will need to approve it.': 'ከክትትል ዝርዝሩ ተወግደዋል። እንደገና ለመቀላቀል መጠየቅ ይችላሉ፤ አስተዳዳሪው ማጽደቅ አለበት።',
-  'Full name': 'ሙሉ ስም', 'Phone number': 'ስልክ ቁጥር', 'Send join request': 'የመቀላቀል ጥያቄ ላክ', 'Join': 'ተቀላቀል',
-  'You joined the attendance list.': 'የክትትል ዝርዝሩን ተቀላቅለዋል።',
+  'Full name': 'ሙሉ ስም', 'Phone number': 'ስልክ ቁጥር', 'Send join request': 'የመቀላቀል ጥያቄ ላክ',
   'Your join request is waiting for admin approval.': 'የመቀላቀል ጥያቄዎ የአስተዳዳሪ ይሁንታ እየጠበቀ ነው።',
   'Your previous join request was not approved. You can send a new one.': 'ያለፈው የመቀላቀል ጥያቄዎ አልጸደቀም። አዲስ መላክ ይችላሉ።',
   'Join request sent.': 'የመቀላቀል ጥያቄ ተልኳል።',
@@ -102,6 +102,9 @@ const am: Record<string, string> = {
   'Rejoin requests': 'እንደገና የመቀላቀል ጥያቄዎች', 'Members who were removed and asked to come back.': 'ተወግደው እንደገና ለመመለስ የጠየቁ አባላት።',
   'No one is waiting.': 'የሚጠብቅ የለም።', 'No approved members yet.': 'ገና የጸደቀ አባል የለም።',
   'No members yet.': 'ገና አባል የለም።',
+  'Visitors': 'ጎብኚዎች', 'No new visitors.': 'አዲስ ጎብኚ የለም።', 'Last seen': 'ለመጨረሻ ጊዜ የታየው',
+  'Everyone who opened the app. Approve someone to make them a member.': 'መተግበሪያውን የከፈቱ ሁሉ። አባል ለማድረግ ያጽድቁ።',
+  'No phone yet': 'ስልክ ገና አልገባም',
   'Reports': 'ሪፖርቶች',
   'Approve': 'አጽድቅ', 'Reject': 'ውድቅ አድርግ', 'Remove': 'አስወግድ', 'Clear mark': 'ምልክት አጽዳ',
   'No approved members yet. Approve members in the Members tab.': 'ገና የጸደቀ አባል የለም። በአባላት ክፍል ያጽድቁ።',
@@ -205,8 +208,8 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
     event.preventDefault()
     setBusy(true)
     try {
-      const result = await api<{ member: Member }>('/api/attendance', { method: 'POST', body: JSON.stringify({ action: 'join', name, phone }) }, headers())
-      notify(tx(result.member.status === 'approved' ? 'You joined the attendance list.' : 'Join request sent.'))
+      await api('/api/attendance', { method: 'POST', body: JSON.stringify({ action: 'join', name, phone }) }, headers())
+      notify(tx('Join request sent.'))
       await load()
     } catch (error) {
       notify(tx(error instanceof Error ? error.message : 'The attendance service is temporarily unavailable.'))
@@ -269,7 +272,7 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
       ? 'You were removed from the attendance list. You can ask to rejoin; the admin will need to approve it.'
       : member?.status === 'rejected'
         ? 'Your previous join request was not approved. You can send a new one.'
-        : 'Join to start checking in.'
+        : 'The admin will approve you before you can check in.'
     return (
       <section className="form-panel att-panel">
         <div className="panel-heading"><div><div className="eyebrow">{tx('ATTENDANCE')}</div><h2>{tx('Join the attendance list')}</h2></div><UserPlus size={18} className="att-heading-icon" /></div>
@@ -277,14 +280,14 @@ function MemberAttendance({ tx, formatDateTime, headers, notify, defaultName }: 
         <form className="request-form" onSubmit={join}>
           <label className="field"><span>{tx('Full name')}</span><input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} /></label>
           <label className="field"><span>{tx('Phone number')}</span><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+251 9XX XXX XXX" required minLength={5} maxLength={40} /></label>
-          <div className="form-footer"><span /><button className="submit-button" type="submit" disabled={busy}>{tx(member ? 'Send join request' : 'Join')}</button></div>
+          <div className="form-footer"><span /><button className="submit-button" type="submit" disabled={busy}>{tx('Send join request')}</button></div>
         </form>
       </section>
     )
   }
 
-  if (member.status === 'pending') {
-    return <section className="form-panel att-panel att-waiting"><span className="status-badge status-pending"><span />{tx('Waiting for approval')}</span><p>{tx('Your join request is waiting for admin approval.')}</p></section>
+  if (member.status === 'visitor' || member.status === 'pending') {
+    return <section className="form-panel att-panel att-waiting"><span className="status-badge status-pending"><span />{tx('Waiting for approval')}</span><p>{tx(member.status === 'visitor' ? 'The admin will approve you before you can check in.' : 'Your join request is waiting for admin approval.')}</p></section>
   }
 
   const history = view?.history ?? []
@@ -436,14 +439,16 @@ function AdminAttendance({ tx, formatDateTime, headers, notify, language }: Sect
     if (result) void loadOverview()
   }
 
+  const visitors = members.filter((m) => m.status === 'visitor').sort((a, b) => (b.lastSeenAt ?? b.requestedAt).localeCompare(a.lastSeenAt ?? a.requestedAt))
   const pending = members.filter((m) => m.status === 'pending')
   const approved = members.filter((m) => m.status === 'approved')
+  const waitingCount = visitors.length + pending.length
 
   return (
     <>
       <div className="mezmur-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'sessions'} className={tab === 'sessions' ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setTab('sessions')}><ClipboardCheck size={14} /> {tx('Sessions')}</button>
-        <button type="button" role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setTab('members')}><Users size={14} /> {tx('Members')}{pending.length > 0 && <span className="mezmur-tab-count att-pending-count">{pending.length}</span>}</button>
+        <button type="button" role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setTab('members')}><Users size={14} /> {tx('Members')}{waitingCount > 0 && <span className="mezmur-tab-count att-pending-count">{waitingCount}</span>}</button>
         <button type="button" role="tab" aria-selected={tab === 'reports'} className={tab === 'reports' ? 'mezmur-tab active' : 'mezmur-tab'} onClick={() => setTab('reports')}><BarChart3 size={14} /> {tx('Reports')}</button>
       </div>
 
@@ -451,29 +456,47 @@ function AdminAttendance({ tx, formatDateTime, headers, notify, language }: Sect
         <AttendanceReport tx={tx} language={language} headers={headers} notify={notify} />
       ) : tab === 'members' ? (
         <div className="att-admin-grid">
-          <section className="form-panel att-panel">
-            <div className="panel-heading"><h2>{tx('Rejoin requests')}</h2><span className="panel-index">{pending.length}</span></div>
-            <p className="panel-description">{tx('Members who were removed and asked to come back.')}</p>
-            {pending.length === 0 && <p className="empty-copy">{tx('No one is waiting.')}</p>}
-            <ul className="att-member-list">
-              {pending.map((m) => (
-                <li key={m.telegramId}>
-                  <div><strong>{m.name}</strong><span>{[m.username, m.phone].filter(Boolean).join(' · ')}</span></div>
-                  <div className="review-actions">
-                    <button type="button" className="approve-button" disabled={busy} onClick={() => reviewMember(m.telegramId, 'approved')} title={tx('Approve')} aria-label={`${tx('Approve')} ${m.name}`}><Check size={16} /></button>
-                    <button type="button" className="reject-button" disabled={busy} onClick={() => reviewMember(m.telegramId, 'rejected')} title={tx('Reject')} aria-label={`${tx('Reject')} ${m.name}`}><X size={16} /></button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
+          <div className="att-side">
+            <section className="form-panel att-panel">
+              <div className="panel-heading"><h2>{tx('Visitors')}</h2><span className="panel-index">{visitors.length}</span></div>
+              <p className="panel-description">{tx('Everyone who opened the app. Approve someone to make them a member.')}</p>
+              {visitors.length === 0 && <p className="empty-copy">{tx('No new visitors.')}</p>}
+              <ul className="att-member-list">
+                {visitors.map((m) => (
+                  <li key={m.telegramId}>
+                    <div><strong>{m.name}</strong><span>{[m.username, `${tx('Last seen')} ${formatDateTime(m.lastSeenAt ?? m.requestedAt)}`].filter(Boolean).join(' · ')}</span></div>
+                    <div className="review-actions">
+                      <button type="button" className="approve-button" disabled={busy} onClick={() => reviewMember(m.telegramId, 'approved')} title={tx('Approve')} aria-label={`${tx('Approve')} ${m.name}`}><Check size={16} /></button>
+                      <button type="button" className="reject-button" disabled={busy} onClick={() => reviewMember(m.telegramId, 'rejected')} title={tx('Reject')} aria-label={`${tx('Reject')} ${m.name}`}><X size={16} /></button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section className="form-panel att-panel">
+              <div className="panel-heading"><h2>{tx('Rejoin requests')}</h2><span className="panel-index">{pending.length}</span></div>
+              <p className="panel-description">{tx('Members who were removed and asked to come back.')}</p>
+              {pending.length === 0 && <p className="empty-copy">{tx('No one is waiting.')}</p>}
+              <ul className="att-member-list">
+                {pending.map((m) => (
+                  <li key={m.telegramId}>
+                    <div><strong>{m.name}</strong><span>{[m.username, m.phone].filter(Boolean).join(' · ')}</span></div>
+                    <div className="review-actions">
+                      <button type="button" className="approve-button" disabled={busy} onClick={() => reviewMember(m.telegramId, 'approved')} title={tx('Approve')} aria-label={`${tx('Approve')} ${m.name}`}><Check size={16} /></button>
+                      <button type="button" className="reject-button" disabled={busy} onClick={() => reviewMember(m.telegramId, 'rejected')} title={tx('Reject')} aria-label={`${tx('Reject')} ${m.name}`}><X size={16} /></button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
           <section className="form-panel att-panel">
             <div className="panel-heading"><h2>{tx('Members')}</h2><span className="panel-index">{approved.length}</span></div>
             {approved.length === 0 && <p className="empty-copy">{tx('No members yet.')}</p>}
             <ul className="att-member-list">
               {approved.map((m) => (
                 <li key={m.telegramId}>
-                  <div><strong>{m.name}</strong><span>{[m.username, m.phone].filter(Boolean).join(' · ')}</span></div>
+                  <div><strong>{m.name}</strong><span>{[m.username, m.phone || tx('No phone yet')].filter(Boolean).join(' · ')}</span></div>
                   <button type="button" className="remove-lyrics-button" disabled={busy} onClick={() => removeMember(m.telegramId)} title={tx('Remove')} aria-label={`${tx('Remove')} ${m.name}`}><Trash2 size={15} /></button>
                 </li>
               ))}

@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto'
-import { ObjectId } from 'mongodb'
+import { ObjectId, type Collection } from 'mongodb'
 import type { VercelRequest, VercelResponse } from './_lib/http.js'
 import {
   attendanceRecordsCollection,
@@ -12,7 +12,7 @@ import {
   type AttendanceStatus,
   type MemberRecord,
 } from './_lib/mongo.js'
-import { constantTimeEqual, getTelegramUser, isAdmin, signScopedToken, telegramAuthFailure, verifyScopedToken } from './_lib/security.js'
+import { constantTimeEqual, getTelegramUser, isAdmin, signScopedToken, telegramAuthFailure, verifyScopedToken, type VerifiedTelegramUser } from './_lib/security.js'
 import { buildXlsx } from './_lib/xlsx.js'
 
 // The check-in code changes every 30 seconds; the previous code is still accepted so a member
@@ -41,7 +41,24 @@ function publicSession(session: AttendanceSessionRecord & { _id: ObjectId }) {
 }
 
 function publicMember(member: MemberRecord) {
-  return { telegramId: member.telegramId, name: member.name, phone: member.phone, username: member.username, status: member.status, requestedAt: member.requestedAt }
+  return {
+    telegramId: member.telegramId, name: member.name, phone: member.phone, username: member.username,
+    status: member.status, requestedAt: member.requestedAt, lastSeenAt: member.lastSeenAt,
+  }
+}
+
+// Everyone who opens the app is recorded as a visitor until the admin approves them.
+async function recordVisit(members: Collection<MemberRecord>, telegramUser: VerifiedTelegramUser) {
+  const now = new Date().toISOString()
+  const name = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(' ') || (telegramUser.username ? `@${telegramUser.username}` : 'Telegram user')
+  return members.findOneAndUpdate(
+    { telegramId: telegramUser.id },
+    {
+      $set: { lastSeenAt: now, ...(telegramUser.username ? { username: `@${telegramUser.username}` } : {}) },
+      $setOnInsert: { telegramId: telegramUser.id, name, status: 'visitor', requestedAt: now },
+    },
+    { upsert: true, returnDocument: 'after' },
+  )
 }
 
 function queryParams(request: VercelRequest) {
@@ -268,7 +285,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
       if (query.get('view') === 'admin') {
         if (!admin) return response.status(401).json({ error: 'Admin sign-in is required.' })
         const [members, sessions, records] = await Promise.all([
-          membersCollection().then((c) => c.find({ status: { $in: ['pending', 'approved'] } }).sort({ requestedAt: -1 }).toArray()),
+          membersCollection().then((c) => c.find({ status: { $in: ['visitor', 'pending', 'approved'] } }).sort({ requestedAt: -1 }).toArray()),
           attendanceSessionsCollection().then((c) => c.find({}).sort({ startsAt: -1 }).limit(50).toArray()),
           attendanceRecordsCollection().then((c) => c.aggregate<{ _id: { sessionId: string; status: AttendanceStatus }; count: number }>([
             { $group: { _id: { sessionId: '$sessionId', status: '$status' }, count: { $sum: 1 } } },
@@ -299,9 +316,9 @@ export default async function handler(request: VercelRequest, response: VercelRe
         const failure = telegramAuthFailure(request)
         return response.status(failure.status).json({ error: failure.error, code: failure.code })
       }
-      const member = await (await membersCollection()).findOne({ telegramId: telegramUser.id })
+      const member = await recordVisit(await membersCollection(), telegramUser)
       if (!member || member.status !== 'approved') {
-        // Removed and rejected members see the join form again; their request then needs approval.
+        // Visitors wait for approval; removed and rejected members can ask to rejoin.
         return response.status(200).json({ member: member ? publicMember(member) : null, openSessions: [], history: [] })
       }
       const [openSessions, myRecords] = await Promise.all([
@@ -333,13 +350,18 @@ export default async function handler(request: VercelRequest, response: VercelRe
     const action = body.action
 
     // ---- Member actions (Telegram identity) ----
-    if (action === 'join' || action === 'check-in') {
+    if (action === 'visit' || action === 'join' || action === 'set-phone' || action === 'check-in') {
       const telegramUser = getTelegramUser(request)
       if (!telegramUser) {
         const failure = telegramAuthFailure(request)
         return response.status(failure.status).json({ error: failure.error, code: failure.code })
       }
       const members = await membersCollection()
+
+      if (action === 'visit') {
+        const member = await recordVisit(members, telegramUser)
+        return response.status(200).json({ member: member ? publicMember(member) : null })
+      }
 
       if (action === 'join') {
         const { name, phone } = body
@@ -353,12 +375,25 @@ export default async function handler(request: VercelRequest, response: VercelRe
           name: name.trim(),
           phone: phone.trim(),
           ...(telegramUser.username ? { username: `@${telegramUser.username}` } : {}),
-          // Newcomers join right away; someone who was removed (or rejected) must be approved to come back.
-          status: existing ? 'pending' : 'approved',
+          // A removed or rejected member asking to come back is a rejoin request; anyone else stays a visitor.
+          status: existing && existing.status !== 'visitor' ? 'pending' : 'visitor',
           requestedAt: new Date().toISOString(),
+          lastSeenAt: new Date().toISOString(),
         }
         await members.replaceOne({ telegramId: telegramUser.id }, record, { upsert: true })
         return response.status(201).json({ member: publicMember(record) })
+      }
+
+      if (action === 'set-phone') {
+        const phone = typeof body.phone === 'string' ? body.phone.trim() : ''
+        if (phone.length < 5 || phone.length > 40) return response.status(400).json({ error: 'Please enter a valid phone number.' })
+        const result = await members.findOneAndUpdate(
+          { telegramId: telegramUser.id, status: 'approved' },
+          { $set: { phone } },
+          { returnDocument: 'after' },
+        )
+        if (!result) return response.status(403).json({ error: 'Only approved members can add a phone number.' })
+        return response.status(200).json({ member: publicMember(result) })
       }
 
       // check-in
