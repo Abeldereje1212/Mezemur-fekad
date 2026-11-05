@@ -270,7 +270,7 @@ tbody tr:hover { background: #fbfbf7; }
 .type-tag { color: #556554; font-size: 9px; white-space: nowrap; }
 .date-cell,.phone-cell { white-space: nowrap; }
 .date-cell .submitted-at { margin-top: 3px; display: block; color: #969c91; font-size: 9px; }
-.reason-cell { max-width: 155px; overflow: hidden; color: #777f75; text-overflow: ellipsis; white-space: nowrap; }
+.reason-cell { min-width: 180px; max-width: 280px; height: auto; padding-top: 12px; padding-bottom: 12px; color: #777f75; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 td .status-badge { margin-top: 0; }
 .action-column { text-align: center; }
 .review-actions { display: flex; justify-content: center; gap: 5px; }
