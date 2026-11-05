@@ -155,13 +155,14 @@ async function attendanceDb() {
   return client.db(process.env.MONGODB_DB || 'birhane_hiwot')
 }
 
-// 'visitor': opened the app but not approved yet. 'pending': a removed or rejected member asking to rejoin.
+// 'visitor': legacy, from when approval was required (converted to 'approved' on the next visit).
+// 'pending': a removed or rejected member asking to rejoin.
 export type MemberStatus = 'visitor' | 'pending' | 'approved' | 'rejected' | 'removed'
 
 export interface MemberRecord extends Document {
   telegramId: string
   name: string
-  // Visitors are recorded from Telegram alone, so the phone is added after approval.
+  // Members are recorded from Telegram alone, so the phone is added from the profile popup.
   phone?: string
   username?: string
   status: MemberStatus
@@ -170,9 +171,16 @@ export interface MemberRecord extends Document {
   lastSeenAt?: string
 }
 
+// Index creation is a server round trip; do it once per warm instance since every app open hits this.
+let membersIndexReady: Promise<string> | undefined
+
 export async function membersCollection(): Promise<Collection<MemberRecord>> {
   const collection = (await attendanceDb()).collection<MemberRecord>('members')
-  await collection.createIndex({ telegramId: 1 }, { unique: true })
+  membersIndexReady ??= collection.createIndex({ telegramId: 1 }, { unique: true }).catch((error) => {
+    membersIndexReady = undefined
+    throw error
+  })
+  await membersIndexReady
   return collection
 }
 

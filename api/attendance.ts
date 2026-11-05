@@ -47,18 +47,24 @@ function publicMember(member: MemberRecord) {
   }
 }
 
-// Everyone who opens the app is recorded as a visitor until the admin approves them.
+// Everyone who opens the app becomes a member right away; the admin can remove them later.
 async function recordVisit(members: Collection<MemberRecord>, telegramUser: VerifiedTelegramUser) {
   const now = new Date().toISOString()
   const name = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(' ') || (telegramUser.username ? `@${telegramUser.username}` : 'Telegram user')
-  return members.findOneAndUpdate(
+  const member = await members.findOneAndUpdate(
     { telegramId: telegramUser.id },
     {
       $set: { lastSeenAt: now, ...(telegramUser.username ? { username: `@${telegramUser.username}` } : {}) },
-      $setOnInsert: { telegramId: telegramUser.id, name, status: 'visitor', requestedAt: now },
+      $setOnInsert: { telegramId: telegramUser.id, name, status: 'approved', requestedAt: now },
     },
     { upsert: true, returnDocument: 'after' },
   )
+  // Visitors recorded while approval was required become members on their next visit.
+  if (member?.status === 'visitor') {
+    await members.updateOne({ telegramId: telegramUser.id, status: 'visitor' }, { $set: { status: 'approved' } })
+    member.status = 'approved'
+  }
+  return member
 }
 
 function queryParams(request: VercelRequest) {
@@ -350,7 +356,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     const action = body.action
 
     // ---- Member actions (Telegram identity) ----
-    if (action === 'visit' || action === 'join' || action === 'set-phone' || action === 'check-in') {
+    if (action === 'visit' || action === 'join' || action === 'complete-profile' || action === 'check-in') {
       const telegramUser = getTelegramUser(request)
       if (!telegramUser) {
         const failure = telegramAuthFailure(request)
@@ -375,8 +381,8 @@ export default async function handler(request: VercelRequest, response: VercelRe
           name: name.trim(),
           phone: phone.trim(),
           ...(telegramUser.username ? { username: `@${telegramUser.username}` } : {}),
-          // A removed or rejected member asking to come back is a rejoin request; anyone else stays a visitor.
-          status: existing && existing.status !== 'visitor' ? 'pending' : 'visitor',
+          // A removed or rejected member asking to come back is a rejoin request; anyone new joins right away.
+          status: existing && existing.status !== 'visitor' ? 'pending' : 'approved',
           requestedAt: new Date().toISOString(),
           lastSeenAt: new Date().toISOString(),
         }
@@ -384,15 +390,17 @@ export default async function handler(request: VercelRequest, response: VercelRe
         return response.status(201).json({ member: publicMember(record) })
       }
 
-      if (action === 'set-phone') {
+      if (action === 'complete-profile') {
+        const name = typeof body.name === 'string' ? body.name.trim() : ''
         const phone = typeof body.phone === 'string' ? body.phone.trim() : ''
+        if (name.length < 2 || name.length > 120) return response.status(400).json({ error: 'Please enter your full name.' })
         if (phone.length < 5 || phone.length > 40) return response.status(400).json({ error: 'Please enter a valid phone number.' })
         const result = await members.findOneAndUpdate(
           { telegramId: telegramUser.id, status: 'approved' },
-          { $set: { phone } },
+          { $set: { name, phone } },
           { returnDocument: 'after' },
         )
-        if (!result) return response.status(403).json({ error: 'Only approved members can add a phone number.' })
+        if (!result) return response.status(403).json({ error: 'Only members can update their details.' })
         return response.status(200).json({ member: publicMember(result) })
       }
 

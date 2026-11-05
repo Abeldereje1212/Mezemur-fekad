@@ -300,7 +300,6 @@ td .status-badge { margin-top: 0; }
 .login-form .field input { min-height: 40px; }
 .login-submit { width: 100%; margin-top: 3px; }
 .login-form .export-button { justify-content: center; }
-.phone-later { border: 0; background: none; color: #858c82; font: 600 11px var(--sans); cursor: pointer; }
 .login-error { margin: -4px 0 0; color: #a75443; font-size: 10px; }
 .mobile-new-button { display: none; }
 
