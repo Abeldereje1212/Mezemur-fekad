@@ -428,12 +428,13 @@ export default async function handler(request: VercelRequest, response: VercelRe
         const phone = typeof body.phone === 'string' ? body.phone.trim() : ''
         if (name.length < 2 || name.length > 120) return response.status(400).json({ error: 'Please enter your full name.' })
         if (phone.length < 5 || phone.length > 40) return response.status(400).json({ error: 'Please enter a valid phone number.' })
+        // Everyone gives their details, whatever their membership status; this never changes the status.
         const result = await members.findOneAndUpdate(
-          { telegramId: telegramUser.id, status: 'approved' },
+          { telegramId: telegramUser.id },
           { $set: { name, phone } },
           { returnDocument: 'after' },
         )
-        if (!result) return response.status(403).json({ error: 'Only members can update their details.' })
+        if (!result) return response.status(404).json({ error: 'Something went wrong.' })
         return response.status(200).json({ member: publicMember(result) })
       }
 

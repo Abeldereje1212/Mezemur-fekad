@@ -83,7 +83,8 @@ export default function PhonePrompt({ language, defaultName, isAdmin, onAdminSig
       if (inTelegram) {
         const result = await response.json() as { member?: { status: string; name?: string; phone?: string } | null }
         const status = result.member?.status
-        const next = status === 'approved' && !result.member?.phone ? 'required' : 'done'
+        // Anyone without stored details is asked, whatever their membership status.
+        const next = result.member && !result.member.phone ? 'required' : 'done'
         writeProfileState(next)
         setState(next)
         setWaiting(status === 'pending')
